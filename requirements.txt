@@ -12,3 +12,6 @@ python-dotenv
 
 # Steps 5-6 — browser automation (person 3)
 playwright
+
+# Tests
+pytest
