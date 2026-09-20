@@ -46,15 +46,8 @@ GET /tasks/<task_id>
 
 ```
 200 OK
-{"task_id": "...", "status": "working", "protocol_version": "1.0",
- "created_at": "2026-09-20T18:04:11.402+00:00",
- "history": [{"state": "submitted", "at": "..."},
-             {"state": "working",   "at": "..."}]}
+{"task_id": "...", "status": "working"}
 ```
-
-`history` is every state change with a timestamp. Nothing in the flow depends
-on it — the Requester acts on `status` alone — but it is what we show in the
-report and the demo to evidence the lifecycle actually happened.
 
 ...and once finished:
 
@@ -86,41 +79,9 @@ Unknown id:
 | `working`   | RAG pipeline is running                               |
 | `completed` | `result` is present                                   |
 | `failed`    | `error` is present, `result` is absent                |
-| `canceled`  | stopped before finishing; no `result`                 |
 
-`submitted` and `working` are non-terminal; the Requester keeps polling.
-`completed`, `failed` and `canceled` are terminal; the Requester stops.
-
-A status the client does not recognise is a protocol mismatch, not something to
-keep polling on — the client stops with `PROTOCOL_ERROR`.
-
-### Cancel a task
-
-```
-POST /tasks/<task_id>/cancel
-```
-
-Cancellation is **cooperative**. A task still `submitted` is canceled at once. A
-task already `working` cannot be interrupted — a thread inside an embedding
-lookup or an LLM call will not stop on request — so the cancel is recorded and
-the worker discards its result when it finishes. While that is pending, polling
-returns the current state plus `"cancel_requested": true`. Cancelling a task
-that has already finished is a no-op and returns its terminal state.
-
-The Requester cancels automatically when it times out, so work nobody will read
-does not keep running.
-
-### Discovery — the agent card
-
-```
-GET /.well-known/agent-card.json
-```
-
-Returns what this agent is, the skills it offers, its input and output fields,
-and the task states it uses. Nothing in our flow requires it (the Requester is
-pointed at one Specialist), but it is the seam a second Specialist would plug
-into — the Requester would read cards and route by skill rather than by
-hostname.
+`submitted` and `working` are both non-terminal; the Requester keeps polling.
+`completed` and `failed` are terminal; the Requester stops.
 
 ### Error codes
 
@@ -129,7 +90,6 @@ hostname.
 | `NO_RELEVANT_CONTEXT` | retrieval found nothing above the relevance threshold |
 | `LLM_ERROR`           | the model call failed or returned unparseable output  |
 | `UNKNOWN_TASK`        | polled task id does not exist                         |
-| `BAD_REQUEST`         | the submission was malformed (no `question`, bad `needs`) |
 
 ---
 
@@ -212,16 +172,4 @@ class Outcome:
 | `TIMEOUT`              | polling exceeded the deadline                       |
 | `UNMAPPABLE_CATEGORY`  | KB category has no dropdown option                  |
 | `VERIFICATION_FAILED`  | form submitted but the confirmation did not match   |
-| `SPECIALIST_UNREACHABLE` | the server is unreachable after retries           |
-| `SPECIALIST_ERROR`     | the server answered 5xx on every retry              |
-| `CANCELED`             | the task was canceled before it finished            |
-| `PROTOCOL_ERROR`       | the server returned a status we do not understand   |
-
-## Transport behaviour
-
-The client retries transport errors and 5xx responses up to three times with
-backoff (0.25s, 0.5s) before giving up. A 4xx is never retried — the Specialist
-understood the request and refused it, and repeating it will not help.
-
-Polling starts at 0.25s and widens by 1.5x up to 2s, so a fast task is not
-waited on unnecessarily and a slow one is not hammered.
+| `SPECIALIST_UNREACHABLE` | the server is not running                         |

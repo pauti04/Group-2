@@ -7,13 +7,6 @@ Run it:
     python -m specialist.server --delay 3       # visible `working` state
     python -m specialist.server --delay 999     # force the Requester to time out
 
-Endpoints:
-    GET  /.well-known/agent-card.json   what this agent is and can do
-    POST /tasks                         submit, acknowledged immediately
-    GET  /tasks/<id>                    status, and the result once it exists
-    POST /tasks/<id>/cancel             stop a task we no longer need
-    GET  /health                        liveness
-
 This module knows nothing about RAG beyond calling `rag.pipeline.answer`, and
 nothing at all about the web form. See CONTRACTS.md.
 """
@@ -25,27 +18,10 @@ import argparse
 from flask import Flask, jsonify, request
 
 from rag.pipeline import answer
-from specialist.agent_card import AGENT_CARD
-from specialist.tasks import PROTOCOL_VERSION, TERMINAL, TaskStore
+from specialist.tasks import TaskStore
 
 app = Flask(__name__)
 store = TaskStore()
-
-
-def _error(code: str, message: str, http_status: int):
-    return jsonify({"error": {"code": code, "message": message},
-                    "protocol_version": PROTOCOL_VERSION}), http_status
-
-
-@app.get("/.well-known/agent-card.json")
-def agent_card():
-    return jsonify(AGENT_CARD), 200
-
-
-@app.get("/.well-known/agent.json")
-def agent_card_legacy():
-    """Alias — earlier drafts of the A2A spec used this path."""
-    return jsonify(AGENT_CARD), 200
 
 
 @app.post("/tasks")
@@ -53,12 +29,10 @@ def submit_task():
     payload = request.get_json(silent=True) or {}
     question = (payload.get("question") or "").strip()
     if not question:
-        return _error("BAD_REQUEST", "Field 'question' is required.", 400)
+        return jsonify({"error": {"code": "BAD_REQUEST",
+                                  "message": "Field 'question' is required."}}), 400
 
     needs = payload.get("needs") or ["category", "resolution"]
-    if not isinstance(needs, list) or not all(isinstance(n, str) for n in needs):
-        return _error("BAD_REQUEST", "Field 'needs' must be a list of strings.", 400)
-
     # The worker closes over `needs` so specialist.tasks stays a generic task
     # runner that knows nothing about RAG.
     task = store.submit(question, worker=lambda q: answer(q, needs=needs))
@@ -71,25 +45,14 @@ def submit_task():
 def get_task(task_id: str):
     task = store.get(task_id)
     if task is None:
-        return _error("UNKNOWN_TASK", f"No task with id {task_id}.", 404)
-    return jsonify(task.to_dict()), 200
-
-
-@app.post("/tasks/<task_id>/cancel")
-def cancel_task(task_id: str):
-    task = store.cancel(task_id)
-    if task is None:
-        return _error("UNKNOWN_TASK", f"No task with id {task_id}.", 404)
-    if task.status in TERMINAL and not task.cancel_requested:
-        # Already finished before the cancel arrived. Not an error — the caller
-        # gets the terminal state and can read the result if there is one.
-        return jsonify(task.to_dict()), 200
+        return jsonify({"error": {"code": "UNKNOWN_TASK",
+                                  "message": f"No task with id {task_id}."}}), 404
     return jsonify(task.to_dict()), 200
 
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok", "protocol_version": PROTOCOL_VERSION}), 200
+    return jsonify({"status": "ok"}), 200
 
 
 def main() -> None:
