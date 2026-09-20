@@ -18,7 +18,7 @@ import argparse
 from flask import Flask, jsonify, request
 
 from rag.pipeline import answer
-from specialist.tasks import TaskStore
+from specialist.tasks import SUBMITTED, TaskStore
 
 app = Flask(__name__)
 store = TaskStore()
@@ -37,8 +37,11 @@ def submit_task():
     # runner that knows nothing about RAG.
     task = store.submit(question, worker=lambda q: answer(q, needs=needs))
     app.logger.info("task %s submitted: %r", task.task_id, question)
-    # Acknowledge immediately — the work is already running on another thread.
-    return jsonify(task.to_dict()), 201
+    # Acknowledge immediately. This is an acceptance snapshot: the background
+    # worker may transition the stored task to `working` before this response
+    # reaches the Requester, but the submission acknowledgment is always the
+    # contract's `submitted` state.
+    return jsonify({"task_id": task.task_id, "status": SUBMITTED}), 201
 
 
 @app.get("/tasks/<task_id>")
@@ -59,7 +62,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Specialist Agent.")
     parser.add_argument("--port", type=int, default=5005)
     parser.add_argument("--delay", type=float, default=0.0,
-                        help="Seconds to stall before working. Use a large value "
+                        help="Seconds to keep each task in working. Use a large value "
                              "to demonstrate the Requester's timeout handling.")
     args = parser.parse_args()
 

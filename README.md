@@ -24,7 +24,7 @@ User request
 |---|---|---|
 | 1. Requester Agent | `requester/coordinator.py`, `a2a_client.py`, `form_plan.py`, `cli.py` | **done** |
 | 2. Specialist Agent | `specialist/server.py`, `specialist/tasks.py` | **done** |
-| 3. A2A protocol | `CONTRACTS.md` + the two files above | working; extend as needed |
+| 3. A2A protocol | `CONTRACTS.md`, `specialist/tasks.py`, `specialist/server.py`, `requester/a2a_client.py` | **done** |
 | 4. RAG + advanced technique | `rag/retrieval.py` | **skeleton** — running on `rag/stub.py` |
 | 5-6. Playwright | `requester/browser.py` | **skeleton** — running on `DryRunSubmitter` |
 | 7. Timeout / failure handling | partly done, see below | needs the three scenarios written up |
@@ -49,9 +49,9 @@ Two terminals. First the Specialist:
 python -m specialist.server --delay 1
 ```
 
-`--delay` stalls each task before it starts working, which makes the
-`submitted -> working -> completed` transitions visible while polling. Then the
-Requester:
+`--delay` keeps each task in the real `working` state before it calls RAG, which
+makes the `submitted -> working -> completed` transitions visible while polling.
+Then the Requester:
 
 ```bash
 python -m requester.cli "I forgot my password and cannot log into my account."
@@ -60,6 +60,28 @@ python -m requester.cli --all       # all five cases from test_cases.json
 
 Current baseline with the stub retriever: **4/5 submitted, 4/5 categorised
 correctly.**
+
+## Step 3 — A2A protocol
+
+The Requester and Specialist use an asynchronous HTTP task protocol. A
+`POST /tasks` submission returns immediately with `201 Created` and the
+acceptance payload `{ "task_id": "<UUID>", "status": "submitted" }`; RAG work
+continues on a background thread. The Requester then polls
+`GET /tasks/<task_id>` until it receives a terminal state.
+
+```
+submitted --background worker starts--> working --RAG succeeds--> completed
+                                           \
+                                            --RAG fails-----> failed
+```
+
+`completed` responses contain the Contract 2 `result` object. `failed`
+responses contain only an `error` object with a stable `code` and explanatory
+`message`; they never include a result. The Requester stops polling on either
+terminal state and turns a failed response into an `A2AError`. An unknown task
+ID returns `404` with `UNKNOWN_TASK`, and the Requester also reports `TIMEOUT`
+or `SPECIALIST_UNREACHABLE` when polling cannot complete. See
+[`CONTRACTS.md`](CONTRACTS.md) for the full request and response shapes.
 
 ## Known behaviour worth keeping
 
