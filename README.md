@@ -24,7 +24,7 @@ User request
 |---|---|---|
 | 1. Requester Agent | `requester/coordinator.py`, `a2a_client.py`, `form_plan.py`, `cli.py` | **done** |
 | 2. Specialist Agent | `specialist/server.py`, `specialist/tasks.py` | **done** |
-| 3. A2A protocol | `CONTRACTS.md` + the two files above | working; extend as needed |
+| 3. A2A protocol | `CONTRACTS.md`, `specialist/`, `requester/a2a_client.py` | **done** |
 | 4. RAG + advanced technique | `rag/retrieval.py` | **skeleton** — running on `rag/stub.py` |
 | 5-6. Playwright | `requester/browser.py` | **skeleton** — running on `DryRunSubmitter` |
 | 7. Timeout / failure handling | partly done, see below | needs the three scenarios written up |
@@ -37,7 +37,7 @@ submitter, so steps 4 and 5-6 can be built independently without blocking anyone
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install flask requests          # enough for steps 1-2
+pip install flask requests pytest   # enough for steps 1-3
 cp .env.example .env                # no API key needed for the stub
 ```
 
@@ -60,6 +60,18 @@ python -m requester.cli --all       # all five cases from test_cases.json
 
 Current baseline with the stub retriever: **4/5 submitted, 4/5 categorised
 correctly.**
+
+## Tests
+
+```bash
+python -m pytest tests/ -q
+```
+
+14 tests covering the A2A protocol: immediate acknowledgment, unique task ids,
+the full lifecycle, status history, every failure path (unretrievable question,
+unknown task, malformed submission, timeout, unreachable server), cancellation,
+and the agent card. They run a real Specialist on a random port and talk to it
+over HTTP, so what is tested is the protocol rather than the view functions.
 
 ## Known behaviour worth keeping
 
