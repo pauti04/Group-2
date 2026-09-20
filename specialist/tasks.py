@@ -58,9 +58,9 @@ class TaskStore:
     def __init__(self, work_delay_s: float = 0.0) -> None:
         self._tasks: dict[str, Task] = {}
         self._lock = threading.Lock()
-        # Artificial delay before the worker starts. Keeps the `working` state
-        # observable in the demo video, and gives us a knob for the timeout
-        # scenario without having to break the RAG pipeline.
+        # Artificial delay while the task is working. It keeps the `working`
+        # state observable in the demo video, and gives us a knob for the
+        # timeout scenario without having to break the RAG pipeline.
         self.work_delay_s = work_delay_s
 
     def submit(self, question: str, worker: Callable[[str], dict[str, Any]]) -> Task:
@@ -75,10 +75,13 @@ class TaskStore:
             return self._tasks.get(task_id)
 
     def _run(self, task: Task, worker: Callable[[str], dict[str, Any]]) -> None:
-        if self.work_delay_s:
-            time.sleep(self.work_delay_s)
         with self._lock:
             task.status = WORKING
+        # Set WORKING before delaying. Otherwise a quick worker can jump from
+        # submitted to completed between two polls, making a required protocol
+        # state defined but not actually observable.
+        if self.work_delay_s:
+            time.sleep(self.work_delay_s)
         try:
             result = worker(task.question)
         except TaskError as exc:

@@ -62,7 +62,7 @@ class SpecialistClient:
             if time.monotonic() - started > self.timeout_s:
                 raise A2AError(
                     "TIMEOUT",
-                    f"Task {task_id} did not finish within {self.timeout_s:.0f}s "
+                    f"Task {task_id} did not finish within {self.timeout_s:g}s "
                     f"(polled {polls} times).",
                 )
             try:
