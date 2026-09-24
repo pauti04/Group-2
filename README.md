@@ -83,6 +83,21 @@ ID returns `404` with `UNKNOWN_TASK`, and the Requester also reports `TIMEOUT`
 or `SPECIALIST_UNREACHABLE` when polling cannot complete. See
 [`CONTRACTS.md`](CONTRACTS.md) for the full request and response shapes.
 
+## Step 4 — RAG pipeline
+The real pipeline (rag/retrieval.py) replaces the day-one keyword-overlap stub (rag/stub.py, kept for comparison) with fusion retrieval: BM25 and dense (sentence-transformers + FAISS) rankings over section-level chunks (Description/Symptoms/When to Use only — the parts of each doc that describe the problem, not the fix), combined with Reciprocal Rank Fusion. Fused candidates are graded for relevance by an LLM (rag/llm.py, via Groq) before generation, so the pipeline honestly raises NO_RELEVANT_CONTEXT when nothing retrieved actually answers the question rather than letting the model improvise. category is always read verbatim from the winning document's own Ticket Category section, never generated freeform, so it matches the Requester's category mapping exactly.
+
+This fixes the stub's known weakness: "My laptop won't connect to Wi-Fi" was classified Hardware because keyword overlap on "laptop" outscored network.md, which never mentions laptops. BM25 now scores network.md's Symptoms chunk on "Wi-Fi" directly, and the fused result is correctly Network. See rag/retrieval.py's module docstring for the full rationale, and the report for the before/after comparison against test_cases.json.
+
+The index (embeddings + BM25 corpus) is built once per server process — protected by a lock so concurrent requests can't trigger redundant rebuilds — and cached to disk, keyed by a hash of knowledge_base/'s contents, so edits to the KB auto-invalidate the cache.
+
+Known behaviour worth keeping
+"My company email is not synchronizing" retrieves correctly (category: Email) but fails downstream with UNMAPPABLE_CATEGORY. Not a bug. The knowledge base documents Email and Security, but the ticket form's dropdown has only Account Access / Hardware / Software / Network. Rather than file the ticket under a wrong category, the Requester refuses. This is one of our documented failure scenarios (step 7), and it's why the ceiling is 4/5 submitted even with a fully correct RAG pipeline.
+
+Working on this repo
+Read CONTRACTS.md first. It defines the two interfaces — the A2A wire format and the result payload — that everything else is built against. If you need to change either one, tell the whole team, because all four tracks depend on them.
+
+Do not commit .env, any API key, or rag/.index_cache.pkl.
+
 ## Known behaviour worth keeping
 
 **"My laptop won't connect to Wi-Fi" is classified `Hardware`, not `Network`.**
