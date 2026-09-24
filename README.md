@@ -25,7 +25,7 @@ User request
 | 1. Requester Agent | `requester/coordinator.py`, `a2a_client.py`, `form_plan.py`, `cli.py` | **done** |
 | 2. Specialist Agent | `specialist/server.py`, `specialist/tasks.py` | **done** |
 | 3. A2A protocol | `CONTRACTS.md`, `specialist/tasks.py`, `specialist/server.py`, `requester/a2a_client.py` | **done** |
-| 4. RAG + advanced technique | `rag/retrieval.py` | **skeleton** — running on `rag/stub.py` |
+| 4. RAG + advanced technique | `rag/retrieval.py` | **done** |
 | 5-6. Playwright | `requester/browser.py` | **skeleton** — running on `DryRunSubmitter` |
 | 7. Timeout / failure handling | partly done, see below | needs the three scenarios written up |
 | Harness, report, video | `harness/`, `docs/` | not started |
