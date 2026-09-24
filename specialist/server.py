@@ -67,6 +67,13 @@ def main() -> None:
     args = parser.parse_args()
 
     store.work_delay_s = args.delay
+    import os
+    if os.getenv("RAG_BACKEND", "stub").lower() == "real":
+        from rag.retrieval import _load_or_build_index
+        app.logger.info("Warming RAG index before accepting requests...")
+        _load_or_build_index()
+        app.logger.info("RAG index ready.")
+
     app.run(port=args.port, threaded=True)
 
 
