@@ -45,9 +45,10 @@ TODO (person 3)
 """
 
 from __future__ import annotations
-
+import re
 from pathlib import Path
 
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError #for step 7
 from requester.form_plan import FormPlan, PlanError, SubmissionResult
 
 APP_PATH = Path(__file__).resolve().parent.parent / "mock_support_app" / "index.html"
@@ -62,8 +63,36 @@ class PlaywrightSubmitter:
         self.timeout_ms = timeout_ms
 
     def submit(self, plan: FormPlan) -> SubmissionResult:
-        raise PlanError(
-            "VERIFICATION_FAILED",
-            "PlaywrightSubmitter is not implemented yet (steps 5-6). "
-            "Run with the default DryRunSubmitter until it is.",
-        )
+        with sync_playwright() as playwright: #according to https://playwright.dev/python/docs/api/class-playwright
+            #https://playwright.dev/python/docs/api/class-browsertype
+            browser = playwright.chromium.launch(headless=self.headless, slow_mo=self.slow_mo_ms) #1. sync_playwright() -> chromium.launch(headless=...) -> new_page() -> goto(APP_URL)
+            try:
+                page = browser.new_page()
+                #https://playwright.dev/docs/api/class-page
+                page.goto(APP_URL, wait_until="domcontentloaded")
+                page.fill("#issue", plan.issue)
+                page.select_option('#category', plan.category_option)
+                page.fill("#resolution", plan.resolution)
+                page.click("#submit-ticket"); #2. fill #issue, select_option #category, fill #resolution, click #submit-ticket
+                try:
+                    page.wait_for_selector("#confirmation:not(.hidden)", timeout=self.timeout_ms) #3. wait_for_selector("#confirmation:not(.hidden)") with a timeout
+                except PlaywrightTimeoutError:
+                    raise PlanError("VERIFICATION_FAILED", page.locator("#error").inner_text() or "The confirmation message did not appear.")
+
+                #Read the three confirmation fields into a SubmissionResult and return it.
+                ticket_id = (page.locator("#ticket-id").inner_text().strip())
+                category_shown = (page.locator("#ticket-category").inner_text().strip())
+                resolution_shown = (page.locator("#ticket-resolution").inner_text().strip())
+
+                #The coordinator already re-checks them against the plan, so you do not need to compare them here — but do sanity-check that #ticket-id is 5 digits.
+                if not re.fullmatch(r"\d{5}", ticket_id):
+                    raise PlanError("VERIFICATION_FAILED", f"Invalid ticket ID returned by application: {ticket_id}")
+
+                return SubmissionResult(
+                    ticket_id = ticket_id,
+                    category_shown = category_shown,
+                    resolution_shown = resolution_shown
+                )
+            finally:
+                #Always close the browser (try/finally).
+                browser.close()
