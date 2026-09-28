@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from requester.a2a_client import SpecialistClient
+from requester.browser import PlaywrightSubmitter
 from requester.coordinator import Outcome, handle_request
 from requester.form_plan import DryRunSubmitter
 
@@ -25,18 +26,19 @@ def _log_status(task_id: str, status: str, polls: int) -> None:
     print(f"    [a2a] {where:<8} task={task_id[:8]}  status={status}")
 
 
-def run_one(text: str, client: SpecialistClient, expected: str | None = None) -> Outcome:
+def run_one(text: str, client: SpecialistClient, expected: str | None = None, submitter=None) -> Outcome:
     print(f"\n>>> {text}")
-    submitter = DryRunSubmitter()
+    submitter = submitter or DryRunSubmitter()
     outcome = handle_request(text, client=client, submitter=submitter)
 
     if outcome.ok:
-        plan = submitter.last_plan
         print(f"    [rag] category={outcome.category!r} "
               f"confidence={outcome.confidence} sources={outcome.sources}")
-        print(f"    [form] #issue      = {plan.issue}")
-        print(f"    [form] #category   = {plan.category_option}")
-        print(f"    [form] #resolution = {plan.resolution}")
+        plan = getattr(submitter, "last_plan", None)   # only DryRunSubmitter has this
+        if plan:
+            print(f"    [form] #issue      = {plan.issue}")
+            print(f"    [form] #category   = {plan.category_option}")
+            print(f"    [form] #resolution = {plan.resolution}")
     print(f"    {outcome.summary()}")
 
     if expected and outcome.category and outcome.category != expected:
@@ -50,10 +52,15 @@ def main() -> None:
     parser.add_argument("--all", action="store_true", help="Run every test case.")
     parser.add_argument("--url", default="http://127.0.0.1:5005")
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--browser", action="store_true", help="Submit with real Playwright.")
+    parser.add_argument("--headed", action="store_true", help="Show the browser window.")
+    parser.add_argument("--slow-mo", type=int, default=0, help="ms delay per browser action.")
     args = parser.parse_args()
 
     client = SpecialistClient(base_url=args.url, timeout_s=args.timeout,
                               on_status=_log_status)
+    submitter = (PlaywrightSubmitter(headless=not args.headed, slow_mo_ms=args.slow_mo)
+                 if args.browser else DryRunSubmitter())
 
     if args.all:
         cases = json.loads(TEST_CASES.read_text())
@@ -61,7 +68,7 @@ def main() -> None:
         correct = 0
         for case in cases:
             expected = case.get("expected_category")
-            outcome = run_one(case["request"], client, expected)
+            outcome = run_one(case["request"], client, expected, submitter)
             submitted += int(outcome.ok)
             # Tracked separately from ok: a ticket can submit successfully and
             # still be filed under the wrong category. This is the retrieval
@@ -73,7 +80,7 @@ def main() -> None:
 
     if not args.request:
         parser.error("Provide a request, or use --all.")
-    run_one(args.request, client)
+    run_one(args.request, client, submitter=submitter)
 
 
 if __name__ == "__main__":
