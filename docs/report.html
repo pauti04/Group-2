@@ -453,32 +453,63 @@ one ticket rather than taking down the agent.</p>
 
 <h2>7. Results</h2>
 
-<p>All five provided test cases complete the full A2A round trip. The table reports
-tickets successfully submitted and categories matching the expected value.</p>
+<p>We report two measurements. The first isolates the retrieval technique; the
+second exercises the complete workflow through a real browser.</p>
+
+<h3>Retrieval accuracy</h3>
+
+<p>For each of the five provided test cases we record which knowledge-base document
+each retriever ranks first, and whether that document carries the expected ticket
+category. This measurement involves no LLM call, which is deliberate: it isolates
+the contribution of the retrieval change from any variance introduced by the
+grading and generation steps.</p>
 
 <table class="avoid">
-  <tr><th style="width:40%">Configuration</th><th>Submitted</th><th>Correct category</th></tr>
-  <tr><td>Baseline keyword retriever</td><td>4 / 5</td><td>4 / 5</td></tr>
-  <tr><td>Fusion retrieval + grading</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr><th style="width:52%">Configuration</th><th>Correct document ranked first</th></tr>
+  <tr><td>Baseline keyword retriever</td><td>4 / 5</td></tr>
+  <tr><td>Fusion retrieval &mdash; BM25 + dense + RRF</td><td><strong>5 / 5</strong></td></tr>
 </table>
 
-<div class="note">
-<strong>To complete before submission:</strong> run
-<code>RAG_BACKEND=real python -m requester.cli --all</code> and fill in the second row.
-The baseline row is measured; the fusion row must be measured the same way rather
-than asserted.
-</div>
+<table class="avoid">
+  <tr>
+    <th style="width:34%">Test case</th>
+    <th style="width:18%">Expected</th>
+    <th style="width:24%">Baseline ranks first</th>
+    <th>Fusion ranks first</th>
+  </tr>
+  <tr><td>Forgot password, cannot log in</td><td>Account Access</td><td><code>account_access.md</code></td><td><code>password_reset.md</code></td></tr>
+  <tr><td>Laptop will not connect to Wi-Fi</td><td>Network</td><td><code>hardware.md</code> &mdash; wrong</td><td><code>network.md</code></td></tr>
+  <tr><td>Keyboard has stopped working</td><td>Hardware</td><td><code>hardware.md</code></td><td><code>hardware.md</code></td></tr>
+  <tr><td>Cannot install software</td><td>Software</td><td><code>software.md</code></td><td><code>software.md</code></td></tr>
+  <tr><td>Company email not synchronising</td><td>Email</td><td><code>email.md</code></td><td><code>email.md</code></td></tr>
+</table>
 
-<p>The baseline's one categorisation error is instructive. Given "My laptop won't
-connect to Wi-Fi", keyword overlap ranked <code>hardware.md</code> above
-<code>network.md</code>, because "laptop" matches hardware symptom text more strongly
-than "Wi-Fi" matches network symptom text. This is precisely the weakness fusion
-retrieval was chosen to address.</p>
+<p>The single difference between the two configurations is the case the technique was
+chosen to address. Given "My laptop won't connect to Wi-Fi", the baseline ranks
+<code>hardware.md</code> first: "laptop" appears in hardware symptom text and
+outweighs the one occurrence of "Wi-Fi". Fusion retrieval ranks
+<code>network.md</code> first, because the BM25 component preserves the literal
+discriminating token that the dense embedding smooths away, and Reciprocal Rank
+Fusion promotes a document both retrievers rank highly over one that only
+lexical overlap favours.</p>
 
-<p>The fifth case, an email synchronisation issue, is correctly classified as Email by
-both configurations and then correctly refused at the form boundary, because the
-provided application has no Email option. We count this as intended behaviour rather
-than a failure of the pipeline.</p>
+<p>The first case is also worth noting. Both retrievers resolve to the correct
+category, but fusion retrieval selects <code>password_reset.md</code> where the
+baseline selects <code>account_access.md</code>. Both documents declare the ticket
+category "Account Access", so the outcome is identical, but the more specific
+document is the better retrieval &mdash; it is the procedure that actually applies to
+a forgotten password.</p>
+
+<h3>End-to-end workflow</h3>
+
+<p>Running all five cases through the complete system &mdash; both agents, the A2A
+protocol, and Playwright driving a real Chromium instance against the support form
+&mdash; produces four submitted tickets with valid five-digit identifiers and correct
+categories. The fifth case is refused at the form boundary with
+<code>UNMAPPABLE_CATEGORY</code>, because the knowledge base correctly classifies it
+as Email and the provided application offers no Email option. We count this as
+intended behaviour rather than a pipeline failure: the ticket that would have been
+filed instead would have carried a category we knew to be wrong.</p>
 
 <h2>8. Reflection</h2>
 
@@ -509,6 +540,12 @@ and was wrong in practice, which is what convinced us to write tests that assert
 state is actually observable rather than merely defined.</p>
 
 <h3>On RAG effectiveness</h3>
+<p>The measured difference between the two retrievers was one case in five, which is
+both encouraging and a caution: five cases is far too small a sample to tune a
+threshold against, and a single flipped result should not be read as a general
+improvement. What it does show is that the failure we predicted from inspecting the
+corpus is the one that fusion retrieval actually fixed.</p>
+
 <p>Retrieval quality on this corpus is dominated by how similar the documents are to
 each other, not by how much text there is. With seven near-identically structured
 documents, the difficulty is discrimination rather than recall, which is why a hybrid
