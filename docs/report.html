@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Group 2 — Multi-Agent AI System</title>
+<style>
+  @page { size: letter; margin: 0.85in 0.9in; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Charter", "Georgia", serif;
+    font-size: 10.5pt; line-height: 1.5; color: #14181d; margin: 0;
+  }
+  h1 { font-size: 20pt; margin: 0 0 2pt; letter-spacing: -0.2pt; }
+  .sub { font-size: 11pt; color: #47525e; margin: 0 0 4pt; }
+  .meta { font-size: 9pt; color: #5d6874; margin: 0 0 22pt; }
+  h2 {
+    font-size: 12.5pt; margin: 20pt 0 7pt; padding-bottom: 3pt;
+    border-bottom: 1.2pt solid #14181d;
+  }
+  h3 { font-size: 10.5pt; margin: 13pt 0 4pt; }
+  p { margin: 0 0 8pt; }
+  ul, ol { margin: 0 0 8pt; padding-left: 17pt; }
+  li { margin-bottom: 3.5pt; }
+  code {
+    font-family: "SF Mono", "Menlo", monospace; font-size: 8.8pt;
+    background: #f1f3f5; padding: 0.5pt 3pt; border-radius: 2pt;
+  }
+  pre {
+    font-family: "SF Mono", "Menlo", monospace; font-size: 8.4pt;
+    background: #f6f7f9; border-left: 2.5pt solid #adb5bd;
+    padding: 7pt 9pt; margin: 0 0 9pt; line-height: 1.42;
+    white-space: pre-wrap; border-radius: 0 2pt 2pt 0;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 10pt; font-size: 9.3pt; }
+  th {
+    text-align: left; border-bottom: 1.1pt solid #14181d;
+    padding: 4pt 7pt 4pt 0; font-weight: 600;
+  }
+  td { padding: 4pt 7pt 4pt 0; border-bottom: 0.5pt solid #dee2e6; vertical-align: top; }
+  td:last-child, th:last-child { padding-right: 0; }
+  .note {
+    background: #fff8e6; border-left: 2.5pt solid #d4a017;
+    padding: 7pt 9pt; margin: 0 0 10pt; font-size: 9.5pt;
+  }
+  .fig { margin: 10pt 0 6pt; text-align: center; }
+  .cap { font-size: 8.8pt; color: #5d6874; text-align: center; margin: 0 0 14pt; }
+  .pb { page-break-before: always; }
+  .avoid { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>Multi-Agent AI Support Ticket System</h1>
+<p class="sub">Group Project 1 &mdash; Agent-to-Agent Communication, RAG, and Browser Automation</p>
+<p class="meta"><strong>Group 2</strong> &nbsp;&middot;&nbsp; Parth Auti, Hasti Bhalodi, Medha Jani, Kento Hopkins &nbsp;&middot;&nbsp; September 28, 2026</p>
+
+<h2>1. System Overview</h2>
+
+<p>Our system takes a plain-language description of an IT problem and files a
+completed support ticket for it, without a human choosing the category or writing
+the resolution notes. It is built from two cooperating agents that communicate
+over an A2A-style HTTP protocol.</p>
+
+<p>The <strong>Requester Agent</strong> coordinates the workflow. It receives the
+user's request, submits it to the Specialist as an asynchronous task, polls until
+the task reaches a terminal state, decides what belongs in each field of the
+support form, drives a browser to submit it, and then verifies that the
+confirmation screen reflects what the Specialist actually returned.</p>
+
+<p>The <strong>Specialist Agent</strong> answers the question. It runs a
+retrieval-augmented generation pipeline over the seven provided support documents:
+it retrieves candidate passages using two independent retrieval strategies, fuses
+their rankings, has an LLM grade the survivors for relevance, and generates a
+resolution grounded only in the retrieved text. It returns a ticket category, the
+resolution notes, the source files used, and a confidence score.</p>
+
+<p>The Specialist's answer is not merely displayed. The category it returns
+determines which option is selected in the form's dropdown, and the resolution it
+generates is the text entered in the resolution field. If the Specialist returns a
+category the form cannot represent, the Requester refuses to submit rather than
+filing the ticket incorrectly.</p>
+
+<h2>2. Architecture and Workflow</h2>
+
+<h3>Workflow, step by step</h3>
+<ol>
+  <li>A user request arrives through the CLI and enters <code>handle_request()</code>.</li>
+  <li>The Requester decides what it needs &mdash; a category and a resolution &mdash; and
+      submits the issue text as a task via <code>POST /tasks</code>.</li>
+  <li>The Specialist registers the task, starts a worker thread, and returns
+      <code>201</code> with a task ID and status <code>submitted</code> immediately.</li>
+  <li>The Requester polls <code>GET /tasks/{id}</code> until the task is terminal.</li>
+  <li>The worker transitions the task to <code>working</code> and calls the RAG pipeline.</li>
+  <li>The pipeline retrieves from the knowledge base and generates an answer.</li>
+  <li>The task becomes <code>completed</code>; the next poll returns the result.</li>
+  <li>The Requester maps the category to a dropdown value, builds a form plan, and
+      Playwright fills and submits the form.</li>
+  <li>The Requester reads the confirmation and verifies it matches the Specialist's answer.</li>
+</ol>
+
+<div class="fig">
+<svg viewBox="0 0 740 600" width="678" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#14181d"/>
+    </marker>
+  </defs>
+
+  <line x1="369" y1="6" x2="369" y2="566" stroke="#868e96" stroke-width="1.1" stroke-dasharray="6 5"/>
+  <text x="369" y="18" font-size="8.6" fill="#5d6874" font-style="italic" text-anchor="middle">A2A boundary</text>
+
+  <rect x="28" y="34" width="140" height="30" rx="15" fill="#e7ecf2" stroke="#14181d" stroke-width="1.1"/>
+  <text x="98" y="54" font-size="10.5" text-anchor="middle" fill="#14181d">User request</text>
+
+  <rect x="28" y="92" width="270" height="180" rx="4" fill="#f6f7f9" stroke="#14181d" stroke-width="1.4"/>
+  <text x="40" y="111" font-size="11" font-weight="bold" fill="#14181d">Requester Agent</text>
+  <text x="40" y="124" font-size="8" fill="#5d6874">requester/ &mdash; rule-based coordinator</text>
+  <rect x="40" y="133" width="246" height="26" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="49" y="150" font-size="8.6" fill="#14181d">coordinator.py &mdash; orchestrates the workflow</text>
+  <rect x="40" y="164" width="246" height="26" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="49" y="181" font-size="8.6" fill="#14181d">a2a_client.py &mdash; submit, poll, timeout</text>
+  <rect x="40" y="195" width="246" height="26" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="49" y="212" font-size="8.6" fill="#14181d">form_plan.py &mdash; mapping, Submitter port</text>
+  <rect x="40" y="226" width="246" height="26" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="49" y="243" font-size="8.6" fill="#14181d">browser.py &mdash; Playwright adapter</text>
+
+  <rect x="440" y="92" width="272" height="92" rx="4" fill="#f6f7f9" stroke="#14181d" stroke-width="1.4"/>
+  <text x="452" y="111" font-size="11" font-weight="bold" fill="#14181d">Specialist Agent</text>
+  <text x="452" y="124" font-size="8" fill="#5d6874">specialist/ &mdash; Flask, threaded task store</text>
+  <rect x="452" y="133" width="248" height="21" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="147" font-size="8.6" fill="#14181d">server.py &mdash; HTTP surface</text>
+  <rect x="452" y="157" width="248" height="21" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="171" font-size="8.6" fill="#14181d">tasks.py &mdash; state machine, workers</text>
+
+  <rect x="440" y="212" width="272" height="206" rx="4" fill="#eef2f6" stroke="#14181d" stroke-width="1.4"/>
+  <text x="452" y="231" font-size="11" font-weight="bold" fill="#14181d">RAG Pipeline</text>
+  <text x="452" y="244" font-size="8" fill="#5d6874">rag/ &mdash; fusion retrieval + relevance grading</text>
+  <rect x="452" y="253" width="248" height="21" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="267" font-size="8.4" fill="#14181d">1. section-aware chunking</text>
+  <rect x="452" y="278" width="120" height="32" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="291" font-size="8.4" fill="#14181d">2a. BM25</text>
+  <text x="461" y="303" font-size="7.6" fill="#5d6874">sparse / keyword</text>
+  <rect x="580" y="278" width="120" height="32" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="589" y="291" font-size="8.4" fill="#14181d">2b. MiniLM + FAISS</text>
+  <text x="589" y="303" font-size="7.6" fill="#5d6874">dense / semantic</text>
+  <rect x="452" y="314" width="248" height="21" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="328" font-size="8.4" fill="#14181d">3. Reciprocal Rank Fusion (k = 60)</text>
+  <rect x="452" y="339" width="248" height="21" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="353" font-size="8.4" fill="#14181d">4. LLM relevance grading</text>
+  <rect x="452" y="364" width="248" height="21" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="461" y="378" font-size="8.4" fill="#14181d">5. LLM generation, grounded</text>
+  <rect x="452" y="389" width="248" height="22" rx="3" fill="#e7ecf2" stroke="#868e96"/>
+  <text x="461" y="404" font-size="8.4" fill="#14181d">&rarr; category, resolution, sources</text>
+
+  <rect x="440" y="446" width="272" height="42" rx="4" fill="#fff" stroke="#14181d" stroke-width="1.1"/>
+  <text x="452" y="464" font-size="10" font-weight="bold" fill="#14181d">knowledge_base/</text>
+  <text x="452" y="478" font-size="8" fill="#5d6874">7 markdown documents</text>
+
+  <rect x="28" y="446" width="270" height="80" rx="4" fill="#f6f7f9" stroke="#14181d" stroke-width="1.4"/>
+  <text x="40" y="464" font-size="11" font-weight="bold" fill="#14181d">Mock Support App</text>
+  <text x="40" y="477" font-size="8" fill="#5d6874">mock_support_app/index.html (static, file://)</text>
+  <rect x="40" y="486" width="246" height="16" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="49" y="497" font-size="7.6" fill="#14181d">#issue &nbsp; #category &nbsp; #resolution &nbsp; #submit-ticket</text>
+  <rect x="40" y="504" width="246" height="16" rx="3" fill="#fff" stroke="#adb5bd"/>
+  <text x="49" y="515" font-size="7.6" fill="#14181d">#confirmation &rarr; #ticket-id, #ticket-category</text>
+
+  <rect x="28" y="548" width="270" height="28" rx="4" fill="#e7ecf2" stroke="#14181d" stroke-width="1.1"/>
+  <text x="40" y="566" font-size="8.8" fill="#14181d">Verification &mdash; confirmation must match the answer</text>
+
+  <line x1="98" y1="64" x2="98" y2="90" stroke="#14181d" stroke-width="1.3" marker-end="url(#a)"/>
+  <text x="105" y="81" font-size="8.4" fill="#5d6874">1</text>
+
+  <text x="369" y="120" font-size="7.8" fill="#5d6874" text-anchor="middle">2  POST /tasks</text>
+  <line x1="300" y1="126" x2="437" y2="126" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+
+  <text x="369" y="146" font-size="7.8" fill="#5d6874" text-anchor="middle">3  201 task_id, submitted</text>
+  <line x1="437" y1="152" x2="300" y2="152" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+
+  <text x="369" y="172" font-size="7.8" fill="#5d6874" text-anchor="middle">4  GET /tasks/{id} &mdash; poll</text>
+  <line x1="300" y1="178" x2="437" y2="178" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+
+  <text x="369" y="198" font-size="7.8" fill="#5d6874" text-anchor="middle">7  completed + result</text>
+  <line x1="437" y1="204" x2="300" y2="204" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+
+  <line x1="576" y1="184" x2="576" y2="210" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+  <text x="583" y="201" font-size="8.4" fill="#5d6874">5</text>
+
+  <line x1="576" y1="446" x2="576" y2="420" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+  <text x="583" y="438" font-size="8.4" fill="#5d6874">6  retrieve</text>
+
+  <line x1="163" y1="272" x2="163" y2="444" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+  <text x="170" y="360" font-size="8.4" fill="#5d6874">8  fill fields, submit</text>
+
+  <line x1="163" y1="526" x2="163" y2="546" stroke="#14181d" stroke-width="1.25" marker-end="url(#a)"/>
+  <text x="170" y="541" font-size="8.4" fill="#5d6874">9</text>
+</svg>
+</div>
+<p class="cap">Figure 1 &mdash; System architecture and request flow. The dashed line is a real
+process boundary: the two agents run as separate processes and communicate only over HTTP.</p>
+
+<h3>Why the components are separated this way</h3>
+<p>Three boundaries are enforced deliberately, and each one paid for itself during
+development:</p>
+<ul>
+  <li><strong>The Specialist does not know a web form exists.</strong> It returns the
+      knowledge base's own category wording; translating that into a dropdown value is
+      the Requester's job.</li>
+  <li><strong>The task store does not know RAG exists.</strong> The pipeline is injected
+      as a worker function, so the entire retrieval layer was replaced mid-project
+      without touching the server or the state machine.</li>
+  <li><strong>The coordinator does not know Playwright exists.</strong> It depends on a
+      <code>Submitter</code> interface, which let the browser automation be built in
+      parallel with everything else, against a dry-run implementation.</li>
+</ul>
+
+<h2 class="pb">3. The A2A Protocol</h2>
+
+<p>We wrote the protocol down in a contracts document before writing any code, and
+treated changes to it as an event the whole team had to agree on. That decision is
+the reason four people could build four components in parallel without breaking each
+other at the seams.</p>
+
+<h3>Endpoints</h3>
+<table class="avoid">
+  <tr><th style="width:31%">Endpoint</th><th>Behaviour</th></tr>
+  <tr><td><code>POST /tasks</code></td><td>Submit a task. Responds <code>201</code> immediately with a task ID and status <code>submitted</code>. Does not wait for the work.</td></tr>
+  <tr><td><code>GET /tasks/{id}</code></td><td>Current status; carries <code>result</code> once completed, or <code>error</code> if failed. <code>404</code> for an unknown ID.</td></tr>
+  <tr><td><code>GET /health</code></td><td>Liveness check.</td></tr>
+</table>
+
+<h3>Task states</h3>
+<table class="avoid">
+  <tr><th style="width:22%">State</th><th style="width:20%">Terminal</th><th>Meaning</th></tr>
+  <tr><td><code>submitted</code></td><td>No</td><td>Accepted, not yet started.</td></tr>
+  <tr><td><code>working</code></td><td>No</td><td>The RAG pipeline is running.</td></tr>
+  <tr><td><code>completed</code></td><td>Yes</td><td><code>result</code> is present.</td></tr>
+  <tr><td><code>failed</code></td><td>Yes</td><td><code>error</code> is present; <code>result</code> is absent.</td></tr>
+</table>
+
+<h3>Messages</h3>
+<pre>Requester &rarr; Specialist
+  POST /tasks
+  {"question": "I forgot my password and cannot log into my account.",
+   "needs": ["category", "resolution"]}
+
+Specialist &rarr; Requester
+  201  {"task_id": "a0b059a4-...", "status": "submitted"}
+
+Requester &rarr; Specialist        GET /tasks/a0b059a4-...
+Specialist &rarr; Requester        200  {"status": "working"}
+
+Requester &rarr; Specialist        GET /tasks/a0b059a4-...
+Specialist &rarr; Requester        200  {"status": "completed",
+                                    "result": {"category": "Account Access",
+                                               "resolution": "...",
+                                               "sources": ["password_reset.md"],
+                                               "confidence": 0.82}}</pre>
+
+<h3>Error taxonomy</h3>
+<p>Failures are typed rather than returned as free text, so the Requester can react
+differently to each. <code>NO_RELEVANT_CONTEXT</code> means the knowledge base had
+nothing useful and no ticket should be filed. <code>LLM_ERROR</code> means the model
+call failed and a retry might succeed. <code>UNKNOWN_TASK</code> and
+<code>BAD_REQUEST</code> are protocol-level faults. <code>TIMEOUT</code> and
+<code>SPECIALIST_UNREACHABLE</code> are raised by the client rather than the server.</p>
+
+<h3>Design decisions</h3>
+<p><strong>The acknowledgment is asynchronous by construction.</strong> The work runs
+on a background thread, so <code>POST /tasks</code> returns while retrieval is still
+in progress. Had submission blocked until the answer was ready, the task IDs and the
+polling loop would have been decorative. Our test suite asserts this directly: it
+submits with an artificial delay active and checks the acknowledgment returns in
+under a second.</p>
+
+<p><strong>The acknowledgment always reports <code>submitted</code>.</strong> We found
+that the worker thread could move the task to <code>working</code> before the
+<code>201</code> response was serialized, meaning a submission could return a status
+that contradicted our own contract. The acknowledgment is now an acceptance snapshot
+that always reports <code>submitted</code>, independent of what the stored task has
+already become.</p>
+
+<p><strong>The question field carries the user's words and nothing else.</strong> Our
+first version wrapped the issue in instruction text &mdash; <em>"Using the support
+knowledge base, identify the correct category&hellip;"</em> &mdash; and passed the whole
+string as the task question. Because the Specialist uses that string directly as its
+retrieval query, the instruction wording became noise in the query and diluted the
+real signal: three of the five test cases dropped below the relevance threshold and
+failed outright. We moved prompt framing into the RAG layer, which knows how it is
+querying, and the protocol now carries the user's text plus a separate
+<code>needs</code> field stating what the Requester wants back.</p>
+
+<h2>4. The RAG Pipeline</h2>
+
+<p>The pipeline runs in five stages over the seven provided documents.</p>
+
+<ol>
+  <li><strong>Load and chunk.</strong> Each document is parsed into its markdown
+      sections. Chunks are built only from the sections that describe
+      <em>problems</em> &mdash; Description, Symptoms, and When to Use &mdash; rather than
+      from the whole document.</li>
+  <li><strong>Index twice.</strong> A sparse BM25 index and a dense index using
+      <code>all-MiniLM-L6-v2</code> embeddings in FAISS, both over the same chunks. The
+      built index is cached to disk, keyed by a SHA-256 fingerprint of the corpus, so
+      it is rebuilt only when the documents change.</li>
+  <li><strong>Fuse.</strong> Both retrievers produce a ranking, and the two rankings are
+      combined with Reciprocal Rank Fusion at <code>k = 60</code>, keeping the top eight
+      candidates.</li>
+  <li><strong>Grade.</strong> An LLM is asked, in one batched call, whether each
+      candidate passage is actually relevant to the question. Chunks that fail are
+      discarded. If nothing survives, the task fails with
+      <code>NO_RELEVANT_CONTEXT</code>.</li>
+  <li><strong>Generate.</strong> The winning document's category is read from its own
+      <code>Ticket Category</code> section, and the LLM writes one to three sentences of
+      resolution notes constrained to the document's <code>Resolution</code> text, at
+      temperature 0.</li>
+</ol>
+
+<h3>Advanced technique: fusion retrieval with relevance grading</h3>
+
+<p>Our chosen technique is <strong>fusion retrieval</strong> &mdash; hybrid sparse and
+dense retrieval combined with Reciprocal Rank Fusion &mdash; paired with
+<strong>LLM relevance grading</strong> before generation. Both sit outside the
+foundational techniques.</p>
+
+<p>The choice was driven by a specific property of this corpus. The seven documents
+share a great deal of boilerplate: the instruction "Restart the computer if
+appropriate" appears in four of them, and every file follows the same
+Description / Symptoms / Troubleshooting / Resolution skeleton. Dense embeddings
+capture that shared structure and blur documents that are semantically adjacent but
+practically distinct, and confusing <code>network.md</code> with
+<code>hardware.md</code> puts the wrong value in the dropdown. BM25 preserves exactly
+the discriminating signal that embeddings smooth away &mdash; the literal tokens
+"Wi-Fi" and "keyboard". Fusing both rankings keeps the keyword precision while
+retaining the semantic reach that connects "cannot log in" to "account locked".</p>
+
+<p>Relevance grading was added for a second reason. Without it, a question the
+knowledge base does not cover still returns the closest chunk, and the LLM will
+write a plausible answer from it. Grading gives the pipeline a principled way to say
+<em>nothing here answers this</em>, which is what makes our
+<code>NO_RELEVANT_CONTEXT</code> failure path honest rather than cosmetic.</p>
+
+<h3>Supporting decisions</h3>
+<ul>
+  <li><strong>Chunk on problem sections only.</strong> Retrieval matches a user's
+      symptom description against symptom text, not against resolution text. Including
+      Resolution sections in the index made every document look similar, since the
+      resolutions are written in the same register.</li>
+  <li><strong>Read the category, generate the resolution.</strong> The category is taken
+      verbatim from the document rather than generated, because it must match a fixed
+      set of options exactly and there is no reason to let a model paraphrase it. Only
+      the prose resolution is generated.</li>
+  <li><strong>One batched grading call.</strong> Grading eight chunks in a single
+      numbered prompt rather than eight separate calls, for latency and cost.</li>
+  <li><strong>Sources are always returned</strong>, so every answer can be traced to the
+      documents it came from.</li>
+</ul>
+
+<h2 class="pb">5. The Playwright Workflow</h2>
+
+<p>The mock application is a static page with no backend, so it is loaded over a
+<code>file://</code> URL built from the repository path. The submitter performs the
+following sequence:</p>
+
+<ol>
+  <li>Launch Chromium and open the page, waiting for <code>domcontentloaded</code>.</li>
+  <li>Fill <code>#issue</code> with the user's original request.</li>
+  <li>Select <code>#category</code> using the option value derived from the
+      Specialist's category.</li>
+  <li>Fill <code>#resolution</code> with the Specialist's generated resolution notes.</li>
+  <li>Click <code>#submit-ticket</code>.</li>
+  <li>Wait for <code>#confirmation:not(.hidden)</code>. If it does not appear within the
+      timeout, read <code>#error</code> from the page and raise
+      <code>VERIFICATION_FAILED</code> carrying what the page actually said.</li>
+  <li>Read <code>#ticket-id</code>, <code>#ticket-category</code> and
+      <code>#ticket-resolution</code>, and confirm the ticket ID is five digits.</li>
+  <li>Close the browser in a <code>finally</code> block.</li>
+</ol>
+
+<h3>Verification is a comparison, not a presence check</h3>
+<p>A confirmation box appearing only proves the form accepted something. The
+coordinator additionally compares the category and resolution echoed back by the
+page against what the Specialist returned, and fails the run if either differs. This
+means a ticket filed under the wrong category cannot be reported as a success.</p>
+
+<h3>The category mapping, and why it can refuse</h3>
+<p>The Specialist returns categories in the knowledge base's own wording. The
+Requester maps these onto the four values the dropdown accepts:</p>
+
+<table class="avoid">
+  <tr><th style="width:42%">Knowledge base category</th><th>Form option</th></tr>
+  <tr><td>Account Access</td><td><code>account_access</code></td></tr>
+  <tr><td>Hardware</td><td><code>hardware</code></td></tr>
+  <tr><td>Software</td><td><code>software</code></td></tr>
+  <tr><td>Network</td><td><code>network</code></td></tr>
+  <tr><td>Email</td><td>no option exists</td></tr>
+  <tr><td>Security</td><td>no option exists</td></tr>
+</table>
+
+<p>The knowledge base documents Email and Security, and the provided test cases
+include an email synchronisation issue whose expected category is "Email", but the
+form's dropdown offers no such option. Rather than silently choosing the nearest
+available category, the Requester raises <code>UNMAPPABLE_CATEGORY</code> and
+declines to submit. The mapping is checked before a browser is launched, so this
+failure is fast and cheap. We treat this as a correctness property: a ticket filed
+under a knowingly wrong category is worse than a ticket not filed.</p>
+
+<h2>6. Error Handling and Failure Modes</h2>
+
+<table class="avoid">
+  <tr><th style="width:27%">Scenario</th><th style="width:31%">Cause</th><th>System behaviour</th></tr>
+  <tr>
+    <td><code>NO_RELEVANT_CONTEXT</code></td>
+    <td>No retrieved passage graded relevant to the question.</td>
+    <td>Task ends <code>failed</code> with the code. The Requester reports it and never opens a browser.</td>
+  </tr>
+  <tr>
+    <td><code>TIMEOUT</code></td>
+    <td>Task stayed non-terminal past the client deadline.</td>
+    <td>The Requester stops polling and reports how long it waited and how many times it polled.</td>
+  </tr>
+  <tr>
+    <td><code>UNMAPPABLE_CATEGORY</code></td>
+    <td>Specialist returned a category the form cannot express.</td>
+    <td>Submission is refused before the browser launches; the message names the category and the options available.</td>
+  </tr>
+  <tr>
+    <td><code>LLM_ERROR</code></td>
+    <td>Model call failed, or returned output that would not parse.</td>
+    <td>Any worker exception is converted into a <code>failed</code> task rather than crashing the server.</td>
+  </tr>
+  <tr>
+    <td><code>VERIFICATION_FAILED</code></td>
+    <td>Confirmation did not appear, or did not match the Specialist's answer.</td>
+    <td>Reported as a failure carrying the page's own error text.</td>
+  </tr>
+  <tr>
+    <td><code>SPECIALIST_UNREACHABLE</code></td>
+    <td>The Specialist process is not running.</td>
+    <td>Reported immediately instead of hanging.</td>
+  </tr>
+  <tr>
+    <td><code>UNKNOWN_TASK</code></td>
+    <td>A polled task ID does not exist.</td>
+    <td><code>404</code> with the code; the client stops polling.</td>
+  </tr>
+</table>
+
+<p>Two structural choices make these tractable. The coordinator never raises: every
+failure returns as a structured outcome carrying an error code, which is why each
+scenario above is reproducible on demand. And any unexpected worker exception is
+caught and converted into a <code>failed</code> task, so a bug in retrieval degrades
+one ticket rather than taking down the agent.</p>
+
+<h2>7. Results</h2>
+
+<p>All five provided test cases complete the full A2A round trip. The table reports
+tickets successfully submitted and categories matching the expected value.</p>
+
+<table class="avoid">
+  <tr><th style="width:40%">Configuration</th><th>Submitted</th><th>Correct category</th></tr>
+  <tr><td>Baseline keyword retriever</td><td>4 / 5</td><td>4 / 5</td></tr>
+  <tr><td>Fusion retrieval + grading</td><td>&mdash;</td><td>&mdash;</td></tr>
+</table>
+
+<div class="note">
+<strong>To complete before submission:</strong> run
+<code>RAG_BACKEND=real python -m requester.cli --all</code> and fill in the second row.
+The baseline row is measured; the fusion row must be measured the same way rather
+than asserted.
+</div>
+
+<p>The baseline's one categorisation error is instructive. Given "My laptop won't
+connect to Wi-Fi", keyword overlap ranked <code>hardware.md</code> above
+<code>network.md</code>, because "laptop" matches hardware symptom text more strongly
+than "Wi-Fi" matches network symptom text. This is precisely the weakness fusion
+retrieval was chosen to address.</p>
+
+<p>The fifth case, an email synchronisation issue, is correctly classified as Email by
+both configurations and then correctly refused at the form boundary, because the
+provided application has no Email option. We count this as intended behaviour rather
+than a failure of the pipeline.</p>
+
+<h2>8. Reflection</h2>
+
+<h3>What worked</h3>
+<p>Writing the protocol and the result payload down before writing code was the single
+most useful decision we made. It meant four people could work on four components
+concurrently, each against a stub of the others, and the pieces fit when they met.
+The two plug points &mdash; injecting the RAG pipeline as a worker function and hiding
+the browser behind a <code>Submitter</code> interface &mdash; were what made that
+concurrency real rather than theoretical: the entire retrieval layer was replaced
+without a single change to the agent that calls it.</p>
+
+<p>Making the coordinator return structured outcomes instead of raising exceptions
+also paid off more than expected. Every failure mode became something we could
+demonstrate on demand rather than something we had to describe.</p>
+
+<h3>What did not work at first</h3>
+<p>Our initial design put the instruction prompt into the A2A message, which polluted
+the retrieval query and silently broke three of five test cases. The lesson was that
+in a RAG system the retrieval query and the generation prompt are different objects
+and belong in different layers.</p>
+
+<p>We also had a protocol state that was defined but unreachable. Our artificial delay
+was placed before the transition to <code>working</code> rather than after it, so
+tasks moved from <code>submitted</code> straight to <code>completed</code> and the
+<code>working</code> state never appeared in any poll. It looked correct in the code
+and was wrong in practice, which is what convinced us to write tests that assert each
+state is actually observable rather than merely defined.</p>
+
+<h3>On RAG effectiveness</h3>
+<p>Retrieval quality on this corpus is dominated by how similar the documents are to
+each other, not by how much text there is. With seven near-identically structured
+documents, the difficulty is discrimination rather than recall, which is why a hybrid
+of keyword and semantic retrieval outperformed either alone and why chunking on
+problem sections mattered more than chunk size. We would expect a much larger corpus
+to shift that balance.</p>
+
+<h3>Limitations</h3>
+<ul>
+  <li>Tasks are held in memory, so a restart loses them. A real deployment would need
+      persistence.</li>
+  <li>There is no retry on a failed LLM call, so a transient model error fails an
+      otherwise valid ticket.</li>
+  <li>Cancellation is not implemented, so a timed-out task keeps running and completes
+      into a result nobody reads.</li>
+  <li>The confidence score is a retrieval statistic, not a calibrated probability, and
+      should not be interpreted as one.</li>
+  <li>The Requester is hardcoded to one Specialist; there is no discovery mechanism.</li>
+</ul>
+
+<h3>What we would improve</h3>
+<ul>
+  <li>Add retries with backoff for transient failures, distinguishing them from genuine
+      task failures.</li>
+  <li>Persist tasks, and add cancellation so abandoned work stops.</li>
+  <li>Publish an agent card so the Requester could discover Specialists and route by
+      skill, which is what a second expert agent would require.</li>
+  <li>Build an evaluation harness that scores retrieval on more than five cases, since
+      five is too few to tune a threshold against with confidence.</li>
+  <li>Resolve the Email and Security categories properly &mdash; either by extending the
+      form or by defining an escalation path &mdash; rather than treating them only as a
+      refusal.</li>
+</ul>
+
+<h2>9. Team Contributions</h2>
+
+<table class="avoid">
+  <tr><th style="width:26%">Member</th><th>Contribution</th></tr>
+  <tr><td>Parth Auti</td><td>Requester Agent and Specialist Agent (steps 1&ndash;2); the contracts document; project structure and contribution workflow.</td></tr>
+  <tr><td>Hasti Bhalodi</td><td>A2A protocol (step 3): task lifecycle, state machine, error taxonomy, and the protocol test suite.</td></tr>
+  <tr><td>Medha Jani</td><td>RAG pipeline and advanced technique (step 4): chunking, dual indexing, Reciprocal Rank Fusion, relevance grading, and generation.</td></tr>
+  <tr><td>Kento Hopkins</td><td>Playwright automation and verification (steps 5&ndash;6), and browser-side failure handling.</td></tr>
+</table>
+
+<h2>Appendix &mdash; Running the System</h2>
+
+<pre>python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+cp .env.example .env          # add GROQ_API_KEY for the real pipeline
+
+# terminal 1
+python -m specialist.server --delay 1
+
+# terminal 2
+python -m requester.cli --all
+python -m unittest test_a2a_protocol -v</pre>
+
+<p>The timeout scenario is reproduced by starting the Specialist with
+<code>--delay 999</code> and running the Requester with <code>--timeout 3</code>. The
+<code>NO_RELEVANT_CONTEXT</code> scenario is reproduced by submitting a question the
+knowledge base does not cover, such as "What is the capital of France?".</p>
+
+</body>
+</html>
