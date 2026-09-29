@@ -26,19 +26,21 @@ User request
 | 2. Specialist Agent | `specialist/server.py`, `specialist/tasks.py` | **done** |
 | 3. A2A protocol | `CONTRACTS.md`, `specialist/tasks.py`, `specialist/server.py`, `requester/a2a_client.py` | **done** |
 | 4. RAG + advanced technique | `rag/retrieval.py` | **done** |
-| 5-6. Playwright | `requester/browser.py` | **skeleton** — running on `DryRunSubmitter` |
-| 7. Timeout / failure handling | partly done, see below | needs the three scenarios written up |
-| Harness, report, video | `harness/`, `docs/` | not started |
+| 5-6. Playwright | `requester/browser.py` | **done** — run with `--browser` |
+| 7. Timeout / failure handling | across the stack, documented in the report | **done** |
+| Report and video | `docs/Group2_Report.pdf`, `Group-2DemoProject-1.mp4` | **done** |
 
-The system runs end to end today on a deterministic stub retriever and a dry-run
-submitter, so steps 4 and 5-6 can be built independently without blocking anyone.
+The system runs end to end. By default it uses a deterministic keyword retriever
+that needs no API key; set `RAG_BACKEND=real` in `.env` for the fusion-retrieval
+pipeline, which needs a Groq key.
 
 ## Setup
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install flask requests          # enough for steps 1-2
-cp .env.example .env                # no API key needed for the stub
+pip install -r requirements.txt
+playwright install chromium         # required for the browser workflow
+cp .env.example .env                # no API key needed for the stub backend
 ```
 
 ## Run it
@@ -55,7 +57,11 @@ Then the Requester:
 
 ```bash
 python -m requester.cli "I forgot my password and cannot log into my account."
-python -m requester.cli --all       # all five cases from test_cases.json
+python -m requester.cli --all                 # all five cases, dry run
+python -m requester.cli --all --browser       # all five, submitted via Playwright
+python -m requester.cli --all --browser --headed --slow-mo 300   # watch it run
+
+python -m unittest test_a2a_protocol -v       # 7 protocol tests
 ```
 
 Current baseline with the stub retriever: **4/5 submitted, 4/5 categorised
