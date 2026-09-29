@@ -2,18 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Group 2 — Multi-Agent AI System</title>
+<title>Group 2 Report</title>
 <style>
   @page { size: letter; margin: 1in; }
   * { box-sizing: border-box; }
-  body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.55; color: #000; margin: 0; }
-  h1 { font-size: 17pt; margin: 0 0 3pt; }
-  .sub { font-size: 12pt; margin: 0 0 3pt; }
-  .meta { font-size: 11pt; margin: 0 0 20pt; }
-  h2 { font-size: 13.5pt; margin: 18pt 0 6pt; }
-  h3 { font-size: 12pt; margin: 12pt 0 4pt; font-style: italic; font-weight: normal; }
-  p { margin: 0 0 8pt; text-align: left; }
-  ul, ol { margin: 0 0 8pt; padding-left: 20pt; }
+  body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.6; color: #000; margin: 0; }
+  h1 { font-size: 16pt; margin: 0 0 4pt; }
+  .meta { font-size: 12pt; margin: 0 0 22pt; }
+  h2 { font-size: 13pt; margin: 18pt 0 6pt; }
+  h3 { font-size: 12pt; margin: 12pt 0 4pt; font-weight: bold; }
+  p { margin: 0 0 9pt; }
+  ul, ol { margin: 0 0 9pt; padding-left: 20pt; }
   li { margin-bottom: 4pt; }
   code { font-family: "Courier New", monospace; font-size: 10.5pt; }
   pre { font-family: "Courier New", monospace; font-size: 9.5pt; background: #f4f4f4;
@@ -31,50 +30,46 @@
 <body>
 
 <h1>Multi-Agent AI Support Ticket System</h1>
-<p class="sub">Group Project 1 &mdash; A2A Communication, RAG, and Browser Automation</p>
-<p class="meta">Group 2: Parth Auti, Hasti Bhalodi, Medha Jani, Kento Hopkins<br>September 28, 2026</p>
+<p class="meta">Group Project 1<br>
+Group 2: Parth Auti, Hasti Bhalodi, Medha Jani, Kento Hopkins<br>
+September 28, 2026</p>
 
-<h2>1. What the System Does</h2>
+<h2>1. What It Does</h2>
 
-<p>Our system takes a description of an IT problem written in plain English and files
-a support ticket for it. Nobody has to pick the category or write the resolution
-notes by hand. It does this with two agents that talk to each other over HTTP.</p>
+<p>You type in a computer problem, like "I forgot my password," and our system files
+a support ticket for it. It picks the category and writes the resolution notes
+itself.</p>
 
-<p>The Requester Agent is in charge of the overall job. It takes the user's request,
-sends it to the Specialist as a task, waits for an answer by polling, works out what
-goes in each box on the support form, uses Playwright to fill in the form and submit
-it, and then checks the confirmation page to make sure the right thing was filed.</p>
+<p>There are two agents. The first one, the Requester, runs the whole job. It sends
+the problem to the second agent, waits for an answer, fills in the support form, and
+checks that the ticket came out right.</p>
 
-<p>The Specialist Agent is the one that actually knows things. It searches the seven
-support documents we were given, pulls out the passages that look relevant, and
-passes those to an LLM to write an answer. It sends back a ticket category, some
-resolution notes, and the names of the files it used.</p>
+<p>The second one, the Specialist, is the one that knows things. It searches our seven
+support documents, finds the parts that match the problem, and gives those to an LLM
+to write the answer. It sends back a category, some resolution notes, and which files
+it used.</p>
 
-<p>The important part is that the Specialist's answer is not just printed out. The
-category it picks decides which option gets selected in the dropdown, and the
-resolution it writes is the text that goes into the resolution box. If the Specialist
-returns a category that the form has no option for, the Requester stops and does not
-submit anything.</p>
+<p>The answer is not just printed on the screen. The category decides what gets picked
+in the dropdown, and the resolution notes are what goes in the resolution box. If the
+category does not match any option on the form, the Requester stops and does not
+submit.</p>
 
-<h2>2. Architecture and Workflow</h2>
+<h2>2. How It Works</h2>
 
-<p>Here is what happens when a request comes in, step by step:</p>
+<p>Here is the order things happen in:</p>
 
 <ol>
-  <li>The user's request comes in through the command line and goes to
-      <code>handle_request()</code>.</li>
-  <li>The Requester works out that it needs two things, a category and a resolution,
-      and sends the issue text to the Specialist with <code>POST /tasks</code>.</li>
-  <li>The Specialist saves the task, starts a worker thread, and replies straight away
-      with a task ID and the status <code>submitted</code>.</li>
-  <li>The Requester keeps calling <code>GET /tasks/{id}</code> to check on it.</li>
-  <li>The worker sets the task to <code>working</code> and runs the RAG pipeline.</li>
-  <li>The pipeline searches the knowledge base and generates an answer.</li>
-  <li>The task becomes <code>completed</code> and the next poll gets the result back.</li>
-  <li>The Requester turns the category into a dropdown value and Playwright fills in
+  <li>The user types a problem and it goes into <code>handle_request()</code>.</li>
+  <li>The Requester sends it to the Specialist with <code>POST /tasks</code>.</li>
+  <li>The Specialist saves the task, starts a thread, and immediately sends back a task
+      ID and the status <code>submitted</code>.</li>
+  <li>The Requester keeps calling <code>GET /tasks/{id}</code> to see if it is done.</li>
+  <li>The thread sets the task to <code>working</code> and runs the RAG pipeline.</li>
+  <li>The pipeline searches the documents and writes an answer.</li>
+  <li>The task becomes <code>completed</code> and the next check gets the answer.</li>
+  <li>The Requester turns the category into a dropdown value, and Playwright fills in
       the form and submits it.</li>
-  <li>The Requester reads the confirmation page and checks it matches what the
-      Specialist said.</li>
+  <li>The Requester reads the confirmation page and checks it says the right thing.</li>
 </ol>
 
 <div class="fig">
@@ -174,46 +169,42 @@ submit anything.</p>
   <text x="170" y="541" font-size="8.4" fill="#5d6874">9</text>
 </svg>
 </div>
-<p class="cap">Figure 1: System architecture and request flow. The dashed line is a
-real process boundary, since the two agents run as separate processes and only talk
-over HTTP.</p>
+<p class="cap">Figure 1: How the parts fit together. The dashed line is where the two
+agents split, since they run as separate programs and only talk over HTTP.</p>
 
-<h3>Why we split it up this way</h3>
+<h3>Why we split it up like this</h3>
 
-<p>We kept three boundaries strict, and all three ended up mattering during the
-project.</p>
+<p>We kept three rules while building it, and all three turned out to matter.</p>
 
-<p>The Specialist does not know that a web form exists. It gives back whatever
-category the knowledge base uses, and the Requester is the one that turns that into a
-dropdown value. The task store does not know that RAG exists either, because the
-pipeline gets passed in as a function. That turned out to be useful, since we
-replaced the whole retrieval layer partway through the project and never had to touch
-the server or the state machine. And the coordinator does not know Playwright exists,
-because it goes through a <code>Submitter</code> interface. That let the browser work
-be written at the same time as everything else instead of after it.</p>
+<p>The Specialist does not know the web form exists. It just returns whatever category
+the documents use, and the Requester turns that into a dropdown value. The task code
+does not know about RAG either, because the pipeline gets handed in as a function.
+That one helped a lot, because we swapped out our whole search system halfway through
+and never had to touch the server. And the coordinator does not know about Playwright,
+because it goes through an interface instead. That meant the browser code could be
+written at the same time as everything else.</p>
 
 <h2 class="pb">3. The A2A Protocol</h2>
 
-<p>We wrote the protocol down in a contracts file before writing any code, and agreed
-that nobody would change it without telling the group. This is probably the main
-reason four people could work on four different parts at once without breaking each
-other's code.</p>
+<p>Before writing any code we wrote the protocol down in a file and agreed nobody
+would change it without telling the group. That is probably why four people could
+work on four parts at the same time without breaking each other's stuff.</p>
 
 <h3>Endpoints</h3>
 <table class="avoid">
   <tr><th style="width:30%">Endpoint</th><th>What it does</th></tr>
-  <tr><td><code>POST /tasks</code></td><td>Submits a task. Replies with <code>201</code>, a task ID, and the status <code>submitted</code>. It does not wait for the work to finish.</td></tr>
-  <tr><td><code>GET /tasks/{id}</code></td><td>Gives the current status. Includes <code>result</code> once the task is done, or <code>error</code> if it failed. Returns <code>404</code> if the ID is not recognised.</td></tr>
-  <tr><td><code>GET /health</code></td><td>Checks the server is up.</td></tr>
+  <tr><td><code>POST /tasks</code></td><td>Sends a task. Replies with a task ID and the status <code>submitted</code>. It does not wait for the work to finish.</td></tr>
+  <tr><td><code>GET /tasks/{id}</code></td><td>Gives the status. Includes the result once it is done, or an error if it failed. Returns <code>404</code> if the ID is wrong.</td></tr>
+  <tr><td><code>GET /health</code></td><td>Checks the server is running.</td></tr>
 </table>
 
 <h3>Task states</h3>
 <table class="avoid">
-  <tr><th style="width:22%">State</th><th style="width:20%">Finished?</th><th>Meaning</th></tr>
-  <tr><td><code>submitted</code></td><td>No</td><td>Accepted but not started yet.</td></tr>
+  <tr><th style="width:22%">State</th><th style="width:20%">Done?</th><th>What it means</th></tr>
+  <tr><td><code>submitted</code></td><td>No</td><td>Accepted but not started.</td></tr>
   <tr><td><code>working</code></td><td>No</td><td>The RAG pipeline is running.</td></tr>
-  <tr><td><code>completed</code></td><td>Yes</td><td>The result is ready.</td></tr>
-  <tr><td><code>failed</code></td><td>Yes</td><td>Something went wrong; there is an error instead of a result.</td></tr>
+  <tr><td><code>completed</code></td><td>Yes</td><td>The answer is ready.</td></tr>
+  <tr><td><code>failed</code></td><td>Yes</td><td>Something went wrong. There is an error instead of an answer.</td></tr>
 </table>
 
 <h3>What the messages look like</h3>
@@ -237,307 +228,283 @@ Specialist -&gt; Requester     200  {"status": "completed",
 
 <h3>Error codes</h3>
 
-<p>We gave the errors codes instead of just returning a message, so the Requester can
-tell them apart and react differently. <code>NO_RELEVANT_CONTEXT</code> means the
-knowledge base had nothing useful and no ticket should be filed at all.
-<code>LLM_ERROR</code> means the model call itself broke, which is something a retry
-might fix. <code>UNKNOWN_TASK</code> and <code>BAD_REQUEST</code> are problems with
-the request. <code>TIMEOUT</code> and <code>SPECIALIST_UNREACHABLE</code> come from
-the client side rather than the server.</p>
+<p>We gave each error a code instead of just a message, so the Requester can tell them
+apart. <code>NO_RELEVANT_CONTEXT</code> means the documents had nothing useful, so no
+ticket should be filed. <code>LLM_ERROR</code> means the model call itself broke.
+<code>UNKNOWN_TASK</code> and <code>BAD_REQUEST</code> mean the request was wrong.
+<code>TIMEOUT</code> and <code>SPECIALIST_UNREACHABLE</code> come from our side, not
+the server's.</p>
 
-<h3>Decisions we made</h3>
+<h3>Things we decided</h3>
 
-<p>The biggest one is that submitting a task does not wait for the answer. The work
-runs on a background thread, so <code>POST /tasks</code> comes back while retrieval
-is still going. If we had made it wait, the task IDs and the polling loop would not
-really be doing anything. One of our tests checks this on purpose by submitting with
-a delay turned on and making sure the reply still comes back in under a second.</p>
+<p>The main one is that sending a task does not wait for the answer. The work happens
+on a background thread, so the reply comes back while the search is still running. If
+we had made it wait, the task IDs and the polling would not really be doing anything.
+We have a test that checks this by turning on a delay and making sure the reply still
+comes back fast.</p>
 
-<p>We also had to make the acknowledgment always say <code>submitted</code>. What we
-found was that the worker thread could sometimes move the task to <code>working</code>
-before the <code>201</code> reply had even been sent, so a submission could come back
-with a status that did not match our own contract. Now the reply is a fixed snapshot
-of "we accepted this" no matter what the stored task has already changed to.</p>
+<p>We also had to make the first reply always say <code>submitted</code>. What was
+happening is the thread could sometimes change the task to <code>working</code> before
+the reply had even been sent, so you could submit a task and get back a status that
+did not match our own rules. Now the reply always says <code>submitted</code> no
+matter what the task has already changed to.</p>
 
-<p>The last one caused us the most trouble. Originally we wrapped the user's issue in
-instruction text before sending it, something like "Using the support knowledge base,
-identify the correct category...", and sent that whole string as the question. The
-problem is that the Specialist uses the question directly as its search query, so all
-that instruction wording ended up in the search and drowned out the actual problem
-description. Three of the five test cases stopped working. We moved the prompt
-wording into the RAG layer where it belongs, and now the protocol just carries the
-user's own words plus a separate <code>needs</code> field saying what we want back.</p>
+<p>The last one gave us the most trouble. At first we wrapped the user's problem in
+extra instructions before sending it, something like "Using the support knowledge
+base, identify the correct category," and sent that whole thing as the question. But
+the Specialist uses the question as its search query, so all those extra words went
+into the search and buried the actual problem. Three of the five test cases stopped
+working. We moved the instructions into the RAG code where they belong, and now we
+just send the user's own words plus a separate field saying what we want back.</p>
 
 <h2>4. The RAG Pipeline</h2>
 
-<p>The pipeline runs in five stages over the seven documents.</p>
+<p>The pipeline has five steps.</p>
 
 <ol>
-  <li><strong>Load and chunk.</strong> Each document gets split up by its markdown
-      sections. We only build chunks out of the sections that describe problems, which
-      are Description, Symptoms and When to Use, rather than the whole file.</li>
-  <li><strong>Build two indexes.</strong> One BM25 keyword index and one dense index
-      using <code>all-MiniLM-L6-v2</code> embeddings stored in FAISS, both over the
-      same chunks. The index gets cached to disk with a hash of the documents, so it
-      only gets rebuilt if the documents change.</li>
-  <li><strong>Fuse the results.</strong> Both indexes produce their own ranking, and
-      we combine the two with Reciprocal Rank Fusion using <code>k = 60</code>, keeping
-      the top eight.</li>
+  <li><strong>Split up the documents.</strong> Each one gets split by its markdown
+      headings. We only keep the sections that describe problems, which are
+      Description, Symptoms, and When to Use.</li>
+  <li><strong>Build two search indexes.</strong> One is BM25, which is keyword based.
+      The other uses <code>all-MiniLM-L6-v2</code> embeddings stored in FAISS, which is
+      meaning based. Both cover the same chunks. We save the index to disk so it only
+      gets rebuilt when the documents change.</li>
+  <li><strong>Combine the two.</strong> Each index gives its own ranked list, and we
+      merge them using Reciprocal Rank Fusion with <code>k = 60</code>. We keep the top
+      eight.</li>
   <li><strong>Grade them.</strong> We ask the LLM in one call whether each of those
-      eight passages is actually relevant, and throw away the ones that are not. If
-      none survive, the task fails with <code>NO_RELEVANT_CONTEXT</code>.</li>
-  <li><strong>Generate.</strong> The category is read straight out of the winning
-      document's own Ticket Category section, and the LLM writes one to three sentences
-      of resolution notes using only that document's Resolution text, at temperature 0.</li>
+      eight passages is actually relevant, and throw out the ones that are not. If
+      nothing is left, the task fails with <code>NO_RELEVANT_CONTEXT</code>.</li>
+  <li><strong>Write the answer.</strong> The category is copied straight from the
+      document's own Ticket Category section. The LLM writes one to three sentences of
+      resolution notes using only that document's Resolution text.</li>
 </ol>
 
-<h3>The advanced technique we picked</h3>
+<h3>The advanced technique we used</h3>
 
-<p>We went with fusion retrieval, which means running keyword and semantic search
-separately and combining the two rankings with Reciprocal Rank Fusion, plus LLM
-relevance grading before anything gets generated. Neither is in the foundational
-group of techniques.</p>
+<p>We used fusion retrieval, which means running keyword search and meaning based
+search separately and then combining the two rankings, plus grading the results with
+the LLM before writing anything. Neither of those is in the basic group of
+techniques.</p>
 
-<p>We picked it because of what these particular documents look like. All seven are
-written to the same template, with the same Description, Symptoms, Troubleshooting
-and Resolution headings, and a lot of the same sentences. "Restart the computer if
-appropriate" shows up in four of them. Embeddings pick up on all that shared
-structure, which makes documents look more alike than they are, and getting
-<code>network.md</code> mixed up with <code>hardware.md</code> means the wrong option
-gets picked in the dropdown. BM25 keeps exactly the signal that embeddings lose,
-which is the literal words "Wi-Fi" and "keyboard". Putting both together keeps the
-keyword precision without giving up the semantic side that connects something like
-"cannot log in" to "account locked".</p>
+<p>We picked it because of what our documents are like. All seven use the same
+template, with the same headings and a lot of the same sentences. "Restart the
+computer if appropriate" is in four of them. Embeddings pick up on all that repeated
+structure, which makes the documents look more similar than they really are. If
+<code>network.md</code> gets confused with <code>hardware.md</code>, the wrong option
+gets picked in the dropdown. BM25 keeps the exact words that tell them apart, like
+"Wi-Fi" and "keyboard". Using both together keeps that while still being able to
+connect something like "cannot log in" to "account locked."</p>
 
-<p>We added the grading step for a different reason. Without it, a question the
-documents do not cover still gets the closest chunk back, and the LLM will happily
-write a confident answer from it. Grading gives the pipeline a way to say that
+<p>We added the grading step for a different reason. Without it, if you ask something
+the documents do not cover, the search still returns the closest thing it has and the
+LLM will write a confident answer from it anyway. Grading lets the system say that
 nothing here actually answers this, which is what makes our
-<code>NO_RELEVANT_CONTEXT</code> case a real failure path instead of one we just
-claim exists.</p>
+<code>NO_RELEVANT_CONTEXT</code> case real instead of something we just say exists.</p>
 
-<h3>Some smaller decisions</h3>
+<h3>Smaller choices</h3>
 <ul>
-  <li>We only index the problem sections. When we included the Resolution sections as
-      well, every document started looking similar, because the resolutions are all
-      written in the same style.</li>
-  <li>The category is copied out of the document rather than generated. It has to match
-      one of a fixed set of options exactly, so there is no reason to let a model
-      reword it. Only the resolution notes get generated.</li>
-  <li>Grading is one call with all eight passages numbered, rather than eight separate
-      calls, to keep it faster and cheaper.</li>
-  <li>The source filenames always come back with the answer, so any result can be
-      traced to the documents behind it.</li>
+  <li>We only index the problem sections. When we included the Resolution sections too,
+      every document started looking the same, because the resolutions are all written
+      the same way.</li>
+  <li>The category is copied from the document instead of generated. It has to exactly
+      match one of four options, so there is no reason to let a model reword it.</li>
+  <li>Grading is one call with all eight passages numbered, instead of eight separate
+      calls, to make it faster and cheaper.</li>
+  <li>The file names always come back with the answer, so you can check where it came
+      from.</li>
 </ul>
 
 <h2 class="pb">5. The Playwright Part</h2>
 
-<p>The mock application is a plain HTML file with no backend, so we load it with a
-<code>file://</code> URL built from wherever the repository is. The submitter then
-does this:</p>
+<p>The mock app is just an HTML file with no backend, so we open it with a
+<code>file://</code> URL. Then the code does this:</p>
 
 <ol>
   <li>Starts Chromium and opens the page.</li>
-  <li>Fills <code>#issue</code> with the user's original request.</li>
-  <li>Picks <code>#category</code> using the option value we worked out from the
-      Specialist's category.</li>
-  <li>Fills <code>#resolution</code> with the generated notes.</li>
+  <li>Types the user's problem into <code>#issue</code>.</li>
+  <li>Picks <code>#category</code> using the value we worked out from the category.</li>
+  <li>Types the resolution notes into <code>#resolution</code>.</li>
   <li>Clicks <code>#submit-ticket</code>.</li>
-  <li>Waits for <code>#confirmation:not(.hidden)</code>. If it never shows up, we read
-      whatever is in <code>#error</code> on the page and fail with
-      <code>VERIFICATION_FAILED</code> carrying that message.</li>
-  <li>Reads <code>#ticket-id</code>, <code>#ticket-category</code> and
-      <code>#ticket-resolution</code>, and checks the ticket ID is five digits.</li>
-  <li>Closes the browser in a <code>finally</code> block so it always shuts down.</li>
+  <li>Waits for <code>#confirmation</code> to appear. If it never does, we read
+      whatever is in <code>#error</code> on the page and fail with that message.</li>
+  <li>Reads the ticket ID, category, and resolution off the confirmation, and checks
+      the ID is five digits.</li>
+  <li>Closes the browser in a <code>finally</code> block so it always shuts.</li>
 </ol>
 
-<h3>Checking the result properly</h3>
+<h3>Checking it actually worked</h3>
 
-<p>A confirmation box showing up only tells you the form accepted something. So the
-coordinator also compares the category and resolution printed on the confirmation
-page against what the Specialist actually returned, and fails the run if they do not
-match. That way a ticket filed under the wrong category cannot be counted as a
-success.</p>
+<p>A confirmation box showing up only proves the form took something. So we also
+compare the category and resolution on the confirmation page against what the
+Specialist sent us, and fail if they are different. That way a ticket filed under the
+wrong category cannot count as a success.</p>
 
-<h3>Mapping categories, and knowing when to stop</h3>
+<h3>Matching categories to the dropdown</h3>
 
-<p>The Specialist gives back categories in the wording the knowledge base uses, so the
-Requester has to map those onto the four values the dropdown accepts:</p>
+<p>The Specialist returns categories the way the documents write them, so we have to
+match those to the four values the dropdown accepts:</p>
 
 <table class="avoid">
-  <tr><th style="width:45%">Knowledge base category</th><th>Form option</th></tr>
+  <tr><th style="width:45%">Category in the documents</th><th>Option on the form</th></tr>
   <tr><td>Account Access</td><td><code>account_access</code></td></tr>
   <tr><td>Hardware</td><td><code>hardware</code></td></tr>
   <tr><td>Software</td><td><code>software</code></td></tr>
   <tr><td>Network</td><td><code>network</code></td></tr>
-  <tr><td>Email</td><td>no option on the form</td></tr>
-  <tr><td>Security</td><td>no option on the form</td></tr>
+  <tr><td>Email</td><td>not on the form</td></tr>
+  <tr><td>Security</td><td>not on the form</td></tr>
 </table>
 
-<p>This is where we hit something we did not expect. The knowledge base has documents
-for Email and Security, and one of the provided test cases is an email problem with
-"Email" as its expected category, but the form's dropdown does not have an Email
-option. Rather than quietly picking whichever category is closest, we made the
-Requester raise <code>UNMAPPABLE_CATEGORY</code> and refuse to submit. The mapping is
-checked before the browser even starts, so this fails quickly. Our reasoning was that
-a ticket filed under a category we already know is wrong is worse than no ticket at
-all.</p>
+<p>This is where we ran into something we did not expect. There are documents for
+Email and Security, and one of the test cases is an email problem that expects the
+category "Email," but the dropdown has no Email option. Instead of just picking
+whichever one is closest, we made it raise <code>UNMAPPABLE_CATEGORY</code> and refuse
+to submit. We check this before the browser even opens, so it fails fast. Our thinking
+was that filing a ticket under a category we already know is wrong is worse than not
+filing one.</p>
 
 <h2>6. Error Handling</h2>
 
 <table class="avoid">
-  <tr><th style="width:27%">What happens</th><th style="width:30%">When</th><th>What the system does</th></tr>
-  <tr><td><code>NO_RELEVANT_CONTEXT</code></td><td>None of the retrieved passages were graded relevant.</td><td>Task ends as <code>failed</code>. The Requester reports it and never opens a browser.</td></tr>
-  <tr><td><code>TIMEOUT</code></td><td>The task was still running when the client gave up waiting.</td><td>Stops polling and reports how long it waited and how many times it checked.</td></tr>
-  <tr><td><code>UNMAPPABLE_CATEGORY</code></td><td>The category has no matching option on the form.</td><td>Refuses before launching the browser, and says which category it got and which ones exist.</td></tr>
-  <tr><td><code>LLM_ERROR</code></td><td>The model call failed or gave back something we could not parse.</td><td>Any exception in the worker turns into a failed task instead of crashing the server.</td></tr>
-  <tr><td><code>VERIFICATION_FAILED</code></td><td>The confirmation never appeared, or did not match.</td><td>Reported as a failure, including whatever error the page itself displayed.</td></tr>
-  <tr><td><code>SPECIALIST_UNREACHABLE</code></td><td>The Specialist is not running.</td><td>Reported immediately instead of hanging.</td></tr>
-  <tr><td><code>UNKNOWN_TASK</code></td><td>The task ID does not exist.</td><td><code>404</code> with the code, and the client stops polling.</td></tr>
+  <tr><th style="width:27%">Error</th><th style="width:30%">When it happens</th><th>What the system does</th></tr>
+  <tr><td><code>NO_RELEVANT_CONTEXT</code></td><td>Nothing found in the documents was relevant.</td><td>The task fails. We report it and never open a browser.</td></tr>
+  <tr><td><code>TIMEOUT</code></td><td>The task was still going when we gave up waiting.</td><td>Stops checking and says how long it waited and how many times it checked.</td></tr>
+  <tr><td><code>UNMAPPABLE_CATEGORY</code></td><td>The category is not on the form.</td><td>Refuses before opening the browser and says which category it got.</td></tr>
+  <tr><td><code>LLM_ERROR</code></td><td>The model call broke or gave back something we could not read.</td><td>Any crash in the worker becomes a failed task instead of killing the server.</td></tr>
+  <tr><td><code>VERIFICATION_FAILED</code></td><td>The confirmation never showed up, or did not match.</td><td>Fails and includes whatever error the page showed.</td></tr>
+  <tr><td><code>SPECIALIST_UNREACHABLE</code></td><td>The Specialist is not running.</td><td>Says so right away instead of hanging.</td></tr>
+  <tr><td><code>UNKNOWN_TASK</code></td><td>The task ID does not exist.</td><td>Returns <code>404</code> and we stop checking.</td></tr>
 </table>
 
-<p>Two things made all of this easier to handle. The coordinator never throws an
-exception. Every failure comes back as a normal return value with an error code on
-it, which is why we can demonstrate any of the cases above on demand. And any
-unexpected crash inside a worker gets caught and turned into a failed task, so a bug
-in retrieval breaks one ticket rather than taking the whole agent down.</p>
+<p>Two things made this easier. The coordinator never throws an exception. Every
+failure comes back as a normal return value with an error code on it, so we can show
+any of these cases on demand. And any crash inside a worker gets caught and turned
+into a failed task, so a bug in the search only breaks one ticket instead of the whole
+agent.</p>
 
 <h2>7. Results</h2>
 
-<p>We measured two things. The first looks at retrieval on its own, and the second
-runs the whole system through a real browser.</p>
+<p>We measured two things. First the search on its own, then the whole system.</p>
 
-<h3>Retrieval</h3>
+<h3>Search results</h3>
 
-<p>For each of the five test cases we checked which document each retriever put
-first, and whether that document has the expected ticket category on it. There is no
-LLM involved in this measurement, which we did on purpose so that the numbers only
-reflect the retrieval change and not anything the grading or generation steps might
-add.</p>
+<p>For each of the five test cases we checked which document each search method put
+first, and whether that document has the right category on it. There is no LLM in this
+test, which we did on purpose so the numbers only show the search change and nothing
+else.</p>
 
 <table class="avoid">
-  <tr><th style="width:55%">Retriever</th><th>Right document ranked first</th></tr>
-  <tr><td>Baseline keyword matching</td><td>4 out of 5</td></tr>
-  <tr><td>Fusion retrieval (BM25 + dense + RRF)</td><td><strong>5 out of 5</strong></td></tr>
+  <tr><th style="width:55%">Search method</th><th>Right document first</th></tr>
+  <tr><td>Basic keyword matching</td><td>4 out of 5</td></tr>
+  <tr><td>Fusion retrieval (BM25 + embeddings + RRF)</td><td><strong>5 out of 5</strong></td></tr>
 </table>
 
 <table class="avoid">
-  <tr><th style="width:33%">Test case</th><th style="width:18%">Expected</th><th style="width:25%">Baseline picked</th><th>Fusion picked</th></tr>
+  <tr><th style="width:33%">Test case</th><th style="width:18%">Should be</th><th style="width:25%">Basic picked</th><th>Fusion picked</th></tr>
   <tr><td>Forgot password, cannot log in</td><td>Account Access</td><td><code>account_access.md</code></td><td><code>password_reset.md</code></td></tr>
   <tr><td>Laptop will not connect to Wi-Fi</td><td>Network</td><td><code>hardware.md</code> (wrong)</td><td><code>network.md</code></td></tr>
-  <tr><td>Keyboard has stopped working</td><td>Hardware</td><td><code>hardware.md</code></td><td><code>hardware.md</code></td></tr>
+  <tr><td>Keyboard stopped working</td><td>Hardware</td><td><code>hardware.md</code></td><td><code>hardware.md</code></td></tr>
   <tr><td>Cannot install software</td><td>Software</td><td><code>software.md</code></td><td><code>software.md</code></td></tr>
-  <tr><td>Company email not syncing</td><td>Email</td><td><code>email.md</code></td><td><code>email.md</code></td></tr>
+  <tr><td>Email not syncing</td><td>Email</td><td><code>email.md</code></td><td><code>email.md</code></td></tr>
 </table>
 
-<p>The one case that changed is the one we were hoping would change. For "My laptop
-won't connect to Wi-Fi", the baseline puts <code>hardware.md</code> first, because
-the word "laptop" appears in the hardware symptoms and outweighs the single mention
-of "Wi-Fi". Fusion retrieval puts <code>network.md</code> first instead, because the
-BM25 half keeps the word that actually distinguishes the two documents, and RRF
-pushes up a document that both retrievers agree on over one that only keyword overlap
-liked.</p>
+<p>The one that changed is the one we were hoping would. For "My laptop won't connect
+to Wi-Fi," the basic version picks <code>hardware.md</code>, because the word "laptop"
+is all over the hardware symptoms and beats the one mention of "Wi-Fi." Fusion
+retrieval picks <code>network.md</code> instead, because the BM25 half keeps the word
+that actually separates the two documents.</p>
 
-<p>The password case is worth a mention too. Both retrievers end up with the right
-category, but fusion picks <code>password_reset.md</code> where the baseline picks
-<code>account_access.md</code>. Both documents say the category is Account Access so
-the ticket comes out the same either way, but the more specific document is the
-better match, since it is the procedure that actually covers a forgotten password.</p>
+<p>The password one is interesting too. Both get the right category, but fusion picks
+<code>password_reset.md</code> where the basic one picks <code>account_access.md</code>.
+Both files say the category is Account Access so the ticket is the same either way,
+but the more specific document is the better match.</p>
 
-<h3>Running the whole thing</h3>
+<h3>The whole system</h3>
 
-<p>Running all five cases through the full system, meaning both agents, the protocol,
-and Playwright driving a real Chromium window against the form, gives four submitted
-tickets with valid five digit IDs and the right categories. The fifth one stops at
-<code>UNMAPPABLE_CATEGORY</code>, because the knowledge base correctly says it is an
-Email issue and the form has no Email option. We are counting that as the system
-working rather than failing, since the only alternative would have been filing it
-under a category we knew was wrong.</p>
+<p>Running all five test cases through everything, meaning both agents, the protocol,
+and Playwright opening a real Chromium window, gives four tickets submitted with valid
+five digit IDs and the right categories. The fifth one stops at
+<code>UNMAPPABLE_CATEGORY</code> because it is an email problem and the form has no
+Email option. We are counting that as working correctly, since the only other choice
+was filing it under a category we knew was wrong.</p>
 
 <h2>8. Reflection</h2>
 
 <h3>What went well</h3>
 
-<p>Writing the protocol and the result format down before we started coding was the
-best decision we made. It meant all four of us could work at the same time, each one
-testing against a fake version of everyone else's part, and things mostly just fit
-together when we joined them up. The two plug-in points, where the RAG pipeline goes
-in as a function and the browser sits behind an interface, are what made that
-actually work rather than just sounding good on paper. We swapped out the entire
-retrieval layer partway through and did not have to change a line in the agent that
-calls it.</p>
+<p>Writing the protocol down before we started coding was the best thing we did. It
+meant all four of us could work at once, each testing against a fake version of
+everyone else's part, and it mostly just fit together when we put it together. The two
+places where you can swap something in, where the RAG pipeline goes in as a function
+and the browser sits behind an interface, are what made that actually work. We
+replaced our entire search system partway through and did not have to change anything
+in the agent that calls it.</p>
 
 <p>Having the coordinator return a result object instead of throwing exceptions also
-helped more than we expected. It meant every failure case was something we could
-trigger and show on demand instead of just describing.</p>
+helped more than we thought it would. Every failure became something we could trigger
+and show instead of just describe.</p>
 
 <h3>What did not go well</h3>
 
-<p>Our first version put the prompt wording into the message we sent between agents,
-which quietly broke three of the five test cases because that wording ended up in the
-search query. It took a while to work out what was happening, since nothing crashed,
-the answers just got worse. The lesson was that the search query and the prompt you
-give the model are two different things and should not live in the same place.</p>
+<p>Our first version put the prompt wording into the message between the agents, which
+quietly broke three of the five test cases because those words ended up in the search.
+It took us a while to figure out, because nothing crashed. The answers just got worse.
+What we learned is that the search query and the prompt you give the model are two
+different things and should not be in the same place.</p>
 
-<p>We also had a state in our protocol that technically existed but could never be
-seen. Our artificial delay was in the wrong spot, before the switch to
-<code>working</code> instead of after it, so tasks jumped from <code>submitted</code>
-straight to <code>completed</code> and nobody polling would ever catch the middle
-state. The code looked fine and was still wrong. That is what made us write tests
-that check each state can actually be observed, not just that it is defined
-somewhere.</p>
+<p>We also had a state in our protocol that existed but could never be seen. Our fake
+delay was in the wrong spot, before the switch to <code>working</code> instead of
+after it, so tasks went from <code>submitted</code> straight to <code>completed</code>
+and you could never catch the middle state. The code looked fine and was still wrong.
+That is why we wrote tests that check each state can actually be seen, not just that
+it exists in the code.</p>
 
-<h3>How well RAG worked</h3>
+<h3>How well the RAG worked</h3>
 
-<p>The difference between the two retrievers came out to one case in five. That is
-encouraging but we do not want to read too much into it, because five test cases is
-nowhere near enough to tune anything against, and one result flipping could easily be
-luck. What it does show is that the problem we predicted just by reading the
-documents is the same one fusion retrieval ended up fixing.</p>
+<p>The difference between the two search methods came out to one case out of five.
+That is good but we do not want to make too much of it, because five test cases is not
+enough to really tune anything, and one result changing could just be luck. What it
+does show is that the problem we guessed at from reading the documents is the same one
+fusion retrieval fixed.</p>
 
-<p>More generally, how well retrieval works on this set of documents depends much more
-on how similar they are to each other than on how much text there is. With seven
-documents all written to the same template, the hard part is telling them apart
-rather than finding them, which is why mixing keyword and semantic search beat either
-one alone, and why choosing which sections to index mattered more than choosing a
-chunk size. A much bigger knowledge base would probably change that balance.</p>
+<p>The bigger thing we noticed is that how well search works on these documents depends
+way more on how similar they are to each other than on how much text there is. With
+seven documents all written from the same template, the hard part is telling them
+apart, not finding them. That is why mixing the two search types beat either one on
+its own, and why picking which sections to index mattered more than picking a chunk
+size. A much bigger set of documents would probably be different.</p>
 
 <h3>Limitations</h3>
 <ul>
-  <li>Tasks are only kept in memory, so restarting the server loses all of them.</li>
-  <li>There are no retries, so one bad LLM call fails a ticket that would otherwise
-      have been fine.</li>
-  <li>There is no way to cancel a task, so if the Requester times out the work carries
-      on and finishes into a result nobody reads.</li>
-  <li>The confidence number is just a retrieval score. It is not a real probability and
-      should not be treated as one.</li>
-  <li>The Requester only knows about one Specialist, and there is no way to discover
-      others.</li>
+  <li>Tasks are only kept in memory, so restarting the server loses them all.</li>
+  <li>There are no retries, so one bad LLM call fails a ticket that would have been
+      fine.</li>
+  <li>You cannot cancel a task, so if we time out the work keeps going and finishes
+      into an answer nobody reads.</li>
+  <li>The confidence number is just a search score. It is not a real probability.</li>
+  <li>The Requester only knows about one Specialist and has no way to find others.</li>
 </ul>
 
 <h3>What we would do next</h3>
 <ul>
-  <li>Add retries with backoff, and tell the difference between a temporary failure and
-      a task that genuinely cannot be done.</li>
-  <li>Store tasks somewhere persistent, and add cancellation so abandoned work stops.</li>
-  <li>Have the Specialist publish a description of itself so the Requester could find
-      agents and choose between them, which is what we would need before adding a
-      second specialist.</li>
-  <li>Build a proper evaluation set with more than five cases, since five is too few to
-      trust a threshold tuned against it.</li>
-  <li>Decide what should actually happen with the Email and Security categories, either
-      by adding them to the form or by defining an escalation path, instead of only
-      refusing.</li>
+  <li>Add retries, and tell the difference between a temporary problem and a task that
+      really cannot be done.</li>
+  <li>Save tasks somewhere so they survive a restart, and add cancelling.</li>
+  <li>Have the Specialist describe itself somewhere so the Requester could find agents
+      and pick between them. We would need that before adding a second specialist.</li>
+  <li>Build a bigger test set, since five cases is not enough to trust.</li>
+  <li>Figure out what should actually happen with Email and Security, either by adding
+      them to the form or by sending them somewhere else, instead of just refusing.</li>
 </ul>
 
 <h2>9. Who Did What</h2>
 
 <table class="avoid">
-  <tr><th style="width:25%">Member</th><th>Work</th></tr>
-  <tr><td>Parth Auti</td><td>Requester Agent and Specialist Agent (steps 1 and 2), the contracts file, and the project structure.</td></tr>
-  <tr><td>Hasti Bhalodi</td><td>The A2A protocol (step 3), including the task lifecycle, the state machine, the error codes, and the protocol tests.</td></tr>
-  <tr><td>Medha Jani</td><td>The RAG pipeline and advanced technique (step 4): chunking, both indexes, Reciprocal Rank Fusion, grading, and generation.</td></tr>
-  <tr><td>Kento Hopkins</td><td>Playwright automation and verification (steps 5 and 6), and the browser side of the error handling.</td></tr>
+  <tr><th style="width:25%">Name</th><th>Work</th></tr>
+  <tr><td>Parth Auti</td><td>The Requester and Specialist agents (steps 1 and 2), the contracts file, and setting up the project.</td></tr>
+  <tr><td>Hasti Bhalodi</td><td>The A2A protocol (step 3): task states, the error codes, and the protocol tests.</td></tr>
+  <tr><td>Medha Jani</td><td>The RAG pipeline and advanced technique (step 4): splitting documents, both indexes, RRF, grading, and generation.</td></tr>
+  <tr><td>Kento Hopkins</td><td>The Playwright automation and checking (steps 5 and 6), and the browser side error handling.</td></tr>
 </table>
 
 <h2>Appendix: How to Run It</h2>
@@ -554,10 +521,9 @@ python -m specialist.server --delay 1
 python -m requester.cli --all --browser
 python -m unittest test_a2a_protocol -v</pre>
 
-<p>To see the timeout case, start the server with <code>--delay 999</code> and run the
-Requester with <code>--timeout 3</code>. To see
-<code>NO_RELEVANT_CONTEXT</code>, ask it something the documents do not cover, like
-"What is the capital of France?".</p>
+<p>To see the timeout, start the server with <code>--delay 999</code> and run the
+Requester with <code>--timeout 3</code>. To see <code>NO_RELEVANT_CONTEXT</code>, ask
+it something the documents do not cover, like "What is the capital of France?"</p>
 
 </body>
 </html>
